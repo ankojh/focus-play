@@ -478,6 +478,130 @@
   },
   "components": {
     "schemas": {
+      "AcquisitionLedger": {
+        "properties": {
+          "round_limit": {
+            "type": "integer",
+            "maximum": 2.0,
+            "minimum": 1.0,
+            "title": "Round Limit",
+            "default": 2
+          },
+          "transcript_limit": {
+            "type": "integer",
+            "maximum": 30.0,
+            "minimum": 1.0,
+            "title": "Transcript Limit",
+            "default": 16
+          },
+          "per_round_limit": {
+            "type": "integer",
+            "maximum": 15.0,
+            "minimum": 1.0,
+            "title": "Per Round Limit",
+            "default": 8
+          },
+          "rounds": {
+            "items": {
+              "$ref": "#/components/schemas/AcquisitionRound"
+            },
+            "type": "array",
+            "maxItems": 2,
+            "title": "Rounds",
+            "default": []
+          },
+          "tried_video_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 30,
+            "title": "Tried Video Ids",
+            "default": []
+          },
+          "search_provider_calls": {
+            "type": "integer",
+            "title": "Search Provider Calls",
+            "default": 0
+          },
+          "transcript_provider_calls": {
+            "type": "integer",
+            "title": "Transcript Provider Calls",
+            "default": 0
+          },
+          "youtube_http_calls": {
+            "type": "integer",
+            "title": "Youtube Http Calls",
+            "default": 0
+          },
+          "youtube_quota_units": {
+            "type": "integer",
+            "title": "Youtube Quota Units",
+            "default": 0
+          },
+          "transcript_http_calls": {
+            "type": "integer",
+            "title": "Transcript Http Calls",
+            "default": 0
+          },
+          "search_cache_hits": {
+            "type": "integer",
+            "title": "Search Cache Hits",
+            "default": 0
+          },
+          "transcript_cache_hits": {
+            "type": "integer",
+            "title": "Transcript Cache Hits",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AcquisitionLedger"
+      },
+      "AcquisitionRound": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "completed": {
+            "type": "boolean",
+            "title": "Completed",
+            "default": false
+          },
+          "candidates": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "maxItems": 15,
+            "title": "Candidates",
+            "default": []
+          },
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 15,
+            "title": "Source Ids",
+            "default": []
+          },
+          "transcript_attempts": {
+            "type": "integer",
+            "title": "Transcript Attempts",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "AcquisitionRound"
+      },
       "Annotation": {
         "properties": {
           "id": {
@@ -1087,6 +1211,45 @@
         ],
         "title": "CoverageEntry"
       },
+      "CoverageGap": {
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "maxLength": 180,
+            "minLength": 5,
+            "title": "Outcome"
+          },
+          "missing_facets": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "definition",
+                "mechanism",
+                "example",
+                "caveat",
+                "application"
+              ]
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Missing Facets"
+          },
+          "query_intent": {
+            "type": "string",
+            "maxLength": 180,
+            "minLength": 5,
+            "title": "Query Intent"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "outcome",
+          "missing_facets",
+          "query_intent"
+        ],
+        "title": "CoverageGap"
+      },
       "DiagramNode": {
         "properties": {
           "id": {
@@ -1218,6 +1381,75 @@
           "detail"
         ],
         "title": "DiagramState"
+      },
+      "DurationLedger": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "const": 2,
+            "title": "Version",
+            "default": 2
+          },
+          "measured_ready_media_ms": {
+            "type": "integer",
+            "title": "Measured Ready Media Ms",
+            "default": 0
+          },
+          "reserved_practice_ms": {
+            "type": "integer",
+            "title": "Reserved Practice Ms",
+            "default": 0
+          },
+          "estimated_unready_media_ms": {
+            "type": "integer",
+            "title": "Estimated Unready Media Ms",
+            "default": 0
+          },
+          "reserved_closing_ms": {
+            "type": "integer",
+            "title": "Reserved Closing Ms",
+            "default": 0
+          },
+          "forecast_total_ms": {
+            "type": "integer",
+            "title": "Forecast Total Ms",
+            "default": 0
+          },
+          "final_content_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Final Content Ms"
+          },
+          "original_content_ms": {
+            "type": "integer",
+            "title": "Original Content Ms",
+            "default": 0
+          },
+          "extra_content_ms": {
+            "type": "integer",
+            "title": "Extra Content Ms",
+            "default": 0
+          },
+          "utilisation": {
+            "type": "number",
+            "title": "Utilisation",
+            "default": 0
+          },
+          "shortfall_ms": {
+            "type": "integer",
+            "title": "Shortfall Ms",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "DurationLedger"
       },
       "ErrorInfo": {
         "properties": {
@@ -1634,6 +1866,29 @@
       },
       "Lesson": {
         "properties": {
+          "planning": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanningState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "acquisition": {
+            "$ref": "#/components/schemas/AcquisitionLedger"
+          },
+          "duration_ledger": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DurationLedger"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "teaching_plan_version": {
             "type": "integer",
             "enum": [
@@ -1657,7 +1912,7 @@
               "$ref": "#/components/schemas/CoverageEntry"
             },
             "type": "array",
-            "maxItems": 64,
+            "maxItems": 83,
             "title": "Coverage History",
             "default": []
           },
@@ -1981,6 +2236,185 @@
           "prerequisites"
         ],
         "title": "Objective"
+      },
+      "OutcomeCoverage": {
+        "properties": {
+          "concept_id": {
+            "type": "string",
+            "title": "Concept Id"
+          },
+          "outcome": {
+            "type": "string",
+            "title": "Outcome"
+          },
+          "evidence_segment_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Evidence Segment Ids"
+          },
+          "supported_facets": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Supported Facets",
+            "default": []
+          },
+          "used_claims": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 1,
+            "title": "Used Claims",
+            "default": []
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "concept_id",
+          "outcome",
+          "evidence_segment_ids"
+        ],
+        "title": "OutcomeCoverage"
+      },
+      "PlanningState": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "const": 2,
+            "title": "Version",
+            "default": 2
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision",
+            "default": 0
+          },
+          "minimum_media_ms": {
+            "type": "integer",
+            "maximum": 40000.0,
+            "minimum": 15000.0,
+            "title": "Minimum Media Ms",
+            "default": 15000
+          },
+          "activity_limit": {
+            "type": "integer",
+            "maximum": 80.0,
+            "minimum": 1.0,
+            "title": "Activity Limit"
+          },
+          "batch_limit": {
+            "type": "integer",
+            "const": 4,
+            "title": "Batch Limit",
+            "default": 4
+          },
+          "expansion_limit": {
+            "type": "integer",
+            "maximum": 80.0,
+            "minimum": 1.0,
+            "title": "Expansion Limit"
+          },
+          "expansion_attempts": {
+            "type": "integer",
+            "title": "Expansion Attempts",
+            "default": 0
+          },
+          "candidate_attempts": {
+            "type": "integer",
+            "title": "Candidate Attempts",
+            "default": 0
+          },
+          "candidate_limit": {
+            "type": "integer",
+            "title": "Candidate Limit",
+            "default": 0
+          },
+          "model_call_units": {
+            "type": "integer",
+            "title": "Model Call Units",
+            "default": 0
+          },
+          "model_call_limit": {
+            "type": "integer",
+            "title": "Model Call Limit",
+            "default": 0
+          },
+          "work_seconds": {
+            "type": "number",
+            "title": "Work Seconds",
+            "default": 0
+          },
+          "work_limit_seconds": {
+            "type": "integer",
+            "title": "Work Limit Seconds",
+            "default": 7200
+          },
+          "completion_reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "target_met",
+                  "coverage_exhausted",
+                  "source_limit",
+                  "generation_limit",
+                  "budget_fit"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completion Reason"
+          },
+          "completion_detail": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Completion Detail",
+            "default": ""
+          },
+          "coverage": {
+            "items": {
+              "$ref": "#/components/schemas/OutcomeCoverage"
+            },
+            "type": "array",
+            "maxItems": 80,
+            "title": "Coverage",
+            "default": []
+          },
+          "missing_coverage": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageGap"
+            },
+            "type": "array",
+            "maxItems": 2,
+            "title": "Missing Coverage",
+            "default": []
+          },
+          "deferred_concept_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 80,
+            "title": "Deferred Concept Ids",
+            "default": []
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "activity_limit",
+          "expansion_limit"
+        ],
+        "title": "PlanningState"
       },
       "ProviderHealth": {
         "properties": {
@@ -2418,6 +2852,20 @@
       },
       "Short": {
         "properties": {
+          "target_duration_ms": {
+            "type": "integer",
+            "maximum": 40000.0,
+            "minimum": 1000.0,
+            "title": "Target Duration Ms",
+            "default": 40000
+          },
+          "duration_uncertainty_ms": {
+            "type": "integer",
+            "maximum": 40000.0,
+            "minimum": 0.0,
+            "title": "Duration Uncertainty Ms",
+            "default": 0
+          },
           "concept_id": {
             "anyOf": [
               {

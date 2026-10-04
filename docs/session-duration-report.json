@@ -1,0 +1,1078 @@
+{
+  "notice": "Synthetic offline arithmetic/control-flow diagnostic. Silent test WAVs, fake source and model/review providers. This is not live evidence, real provider cost/performance, semantic teaching evaluation or wall-clock learning duration.",
+  "live_provider_calls": 0,
+  "live_source_credits_used": 0,
+  "rows": [
+    {
+      "requested_seconds": 60,
+      "fake_ms_per_word": 250,
+      "measured_media_ms": 58000,
+      "practice_allowance_ms": 0,
+      "final_content_ms": 58000,
+      "utilisation": 0.9666666666666667,
+      "shorts": 3,
+      "unique_outcomes": 3,
+      "mapped_coverage_entries": 3,
+      "plan_calls": 2,
+      "model_logical_calls": 8,
+      "reserved_model_call_units": 24,
+      "acquisition": {
+        "round_limit": 2,
+        "transcript_limit": 16,
+        "per_round_limit": 8,
+        "rounds": [
+          {
+            "query": "Understand database index design and tradeoffs for beginners",
+            "completed": true,
+            "candidates": [
+              {
+                "video_id": "dQw4w9WgXcQ",
+                "title": "Test-only YouTube source",
+                "channel": "Test channel"
+              }
+            ],
+            "source_ids": [
+              "src_test_dQw4w9WgXcQ"
+            ],
+            "transcript_attempts": 1
+          }
+        ],
+        "tried_video_ids": [
+          "dQw4w9WgXcQ"
+        ],
+        "search_provider_calls": 1,
+        "transcript_provider_calls": 1,
+        "youtube_http_calls": 0,
+        "youtube_quota_units": 0,
+        "transcript_http_calls": 0,
+        "search_cache_hits": 0,
+        "transcript_cache_hits": 0
+      },
+      "max_plan_task_characters": 8582,
+      "max_retrieved_characters": 2883,
+      "synthetic_preparation_seconds": 0.040268898010253906,
+      "completion_reason": "target_met",
+      "failure_reason": null
+    },
+    {
+      "requested_seconds": 73,
+      "fake_ms_per_word": 250,
+      "measured_media_ms": 71000,
+      "practice_allowance_ms": 0,
+      "final_content_ms": 71000,
+      "utilisation": 0.9726027397260274,
+      "shorts": 4,
+      "unique_outcomes": 4,
+      "mapped_coverage_entries": 4,
+      "plan_calls": 3,
+      "model_logical_calls": 11,
+      "reserved_model_call_units": 33,
+      "acquisition": {
+        "round_limit": 2,
+        "transcript_limit": 16,
+        "per_round_limit": 8,
+        "rounds": [
+          {
+            "query": "Understand database index design and tradeoffs for beginners",
+            "completed": true,
+            "candidates": [
+              {
+                "video_id": "dQw4w9WgXcQ",
+                "title": "Test-only YouTube source",
+                "channel": "Test channel"
+              }
+            ],
+            "source_ids": [
+              "src_test_dQw4w9WgXcQ"
+            ],
+            "transcript_attempts": 1
+          }
+        ],
+        "tried_video_ids": [
+          "dQw4w9WgXcQ"
+        ],
+        "search_provider_calls": 1,
+        "transcript_provider_calls": 1,
+        "youtube_http_calls": 0,
+        "youtube_quota_units": 0,
+        "transcript_http_calls": 0,
+        "search_cache_hits": 0,
+        "transcript_cache_hits": 0
+      },
+      "max_plan_task_characters": 8813,
+      "max_retrieved_characters": 2883,
+      "synthetic_preparation_seconds": 0.054894208908081055,
+      "completion_reason": "target_met",
+      "failure_reason": null
+    },
+    {
+      "requested_seconds": 120,
+      "fake_ms_per_word": 250,
+      "measured_media_ms": 118000,
+      "practice_allowance_ms": 0,
+      "final_content_ms": 118000,
+      "utilisation": 0.9833333333333333,
+      "shorts": 6,
+      "unique_outcomes": 6,
+      "mapped_coverage_entries": 6,
+      "plan_calls": 3,
+      "model_logical_calls": 15,
+      "reserved_model_call_units": 45,
+      "acquisition": {
+        "round_limit": 2,
+        "transcript_limit": 16,
+        "per_round_limit": 8,
+        "rounds": [
+          {
+            "query": "Understand database index design and tradeoffs for beginners",
+            "completed": true,
+            "candidates": [
+              {
+                "video_id": "dQw4w9WgXcQ",
+                "title": "Test-only YouTube source",
+                "channel": "Test channel"
+              }
+            ],
+            "source_ids": [
+              "src_test_dQw4w9WgXcQ"
+            ],
+            "transcript_attempts": 1
+          }
+        ],
+        "tried_video_ids": [
+          "dQw4w9WgXcQ"
+        ],
+        "search_provider_calls": 1,
+        "transcript_provider_calls": 1,
+        "youtube_http_calls": 0,
+        "youtube_quota_units": 0,
+        "transcript_http_calls": 0,
+        "search_cache_hits": 0,
+        "transcript_cache_hits": 0
+      },
+      "max_plan_task_characters": 9088,
+      "max_retrieved_characters": 2886,
+      "synthetic_preparation_seconds": 0.08854794502258301,
+      "completion_reason": "target_met",
+      "failure_reason": null
+    },
+    {
+      "requested_seconds": 137,
+      "fake_ms_per_word": 250,
+      "measured_media_ms": 135000,
+      "practice_allowance_ms": 0,
+      "final_content_ms": 135000,
+      "utilisation": 0.9854014598540146,
+      "shorts": 7,
+      "unique_outcomes": 7,
+      "mapped_coverage_entries": 7,
+      "plan_calls": 3,
+      "model_logical_calls": 17,
+      "reserved_model_call_units": 51,
+      "acquisition": {
+        "round_limit": 2,
+        "transcript_limit": 16,
+        "per_round_limit": 8,
+        "rounds": [
+          {
+            "query": "Understand database index design and tradeoffs for beginners",
+            "completed": true,
+            "candidates": [
+              {
+                "video_id": "dQw4w9WgXcQ",
+                "title": "Test-only YouTube source",
+                "channel": "Test channel"
+              }
+            ],
+            "source_ids": [
+              "src_test_dQw4w9WgXcQ"
+            ],
+            "transcript_attempts": 1
+          }
+        ],
+        "tried_video_ids": [
+          "dQw4w9WgXcQ"
+        ],
+        "search_provider_calls": 1,
+        "transcript_provider_calls": 1,
+        "youtube_http_calls": 0,
+        "youtube_quota_units": 0,
+        "transcript_http_calls": 0,
+        "search_cache_hits": 0,
+        "transcript_cache_hits": 0
+      },
+      "max_plan_task_characters": 9123,
+      "max_retrieved_characters": 2886,
+      "synthetic_preparation_seconds": 0.1012570858001709,
+      "completion_reason": "target_met",
+      "failure_reason": null
+    },
+    {
+      "requested_seconds": 300,
+      "fake_ms_per_word": 250,
+      "measured_media_ms": 241250,
+      "practice_allowance_ms": 40000,
+      "final_content_ms": 281250,
+      "utilisation": 0.9375,
+      "shorts": 11,
+      "unique_outcomes": 11,
+      "mapped_coverage_entries": 11,
+      "plan_calls": 3,
+      "model_logical_calls": 25,
+      "reserved_model_call_units": 75,
+      "acquisition": {
+        "round_limit": 2,
+        "transcript_limit": 16,
+        "per_round_limit": 8,
+        "rounds": [
+          {
+            "query": "Understand database index design and tradeoffs for beginners",
+            "completed": true,
+            "candidates": [
+              {
+                "video_id": "dQw4w9WgXcQ",
+                "title": "Test-only YouTube source",
+                "channel": "Test channel"
+              }
+            ],
+            "source_ids": [
+              "src_test_dQw4w9WgXcQ"
+            ],
+            "transcript_attempts": 1
+          }
+        ],
+        "tried_video_ids": [
+          "dQw4w9WgXcQ"
+        ],
+        "search_provider_calls": 1,
+        "transcript_provider_calls": 1,
+        "youtube_http_calls": 0,
+        "youtube_quota_units": 0,
+        "transcript_http_calls": 0,
+        "search_cache_hits": 0,
+        "transcript_cache_hits": 0
+      },
+      "max_plan_task_characters": 9308,
+      "max_retrieved_characters": 2886,
+      "synthetic_preparation_seconds": 0.19306302070617676,
+      "completion_reason": "target_met",
+      "failure_reason": null
+    },
+    {
+      "requested_seconds": 600,
+      "fake_ms_per_word": 250,
+      "measured_media_ms": 443750,
+      "practice_allowance_ms": 120000,
+      "final_content_ms": 563750,
+      "utilisation": 0.9395833333333333,
+      "shorts": 20,
+      "unique_outcomes": 20,
+      "mapped_coverage_entries": 20,
+      "plan_calls": 5,
+      "model_logical_calls": 45,
+      "reserved_model_call_units": 135,
+      "acquisition": {
+        "round_limit": 2,
+        "transcript_limit": 16,
+        "per_round_limit": 8,
+        "rounds": [
+          {
+            "query": "Understand database index design and tradeoffs for beginners",
+            "completed": true,
+            "candidates": [
+              {
+                "video_id": "dQw4w9WgXcQ",
+                "title": "Test-only YouTube source",
+                "channel": "Test channel"
+              }
+            ],
+            "source_ids": [
+              "src_test_dQw4w9WgXcQ"
+            ],
+            "transcript_attempts": 1
+          }
+        ],
+        "tried_video_ids": [
+          "dQw4w9WgXcQ"
+        ],
+        "search_provider_calls": 1,
+        "transcript_provider_calls": 1,
+        "youtube_http_calls": 0,
+        "youtube_quota_units": 0,
+        "transcript_http_calls": 0,
+        "search_cache_hits": 0,
+        "transcript_cache_hits": 0
+      },
+      "max_plan_task_characters": 9616,
+      "max_retrieved_characters": 2886,
+      "synthetic_preparation_seconds": 0.44680309295654297,
+      "completion_reason": "target_met",
+      "failure_reason": null
+    },
+    {
+      "requested_seconds": 1200,
+      "fake_ms_per_word": 250,
+      "measured_media_ms": 893750,
+      "practice_allowance_ms": 260000,
+      "final_content_ms": 1153750,
+      "utilisation": 0.9614583333333333,
+      "shorts": 40,
+      "unique_outcomes": 40,
+      "mapped_coverage_entries": 40,
+      "plan_calls": 10,
+      "model_logical_calls": 90,
+      "reserved_model_call_units": 270,
+      "acquisition": {
+        "round_limit": 2,
+        "transcript_limit": 16,
+        "per_round_limit": 8,
+        "rounds": [
+          {
+            "query": "Understand database index design and tradeoffs for beginners",
+            "completed": true,
+            "candidates": [
+              {
+                "video_id": "dQw4w9WgXcQ",
+                "title": "Test-only YouTube source",
+                "channel": "Test channel"
+              }
+            ],
+            "source_ids": [
+              "src_test_dQw4w9WgXcQ"
+            ],
+            "transcript_attempts": 1
+          }
+        ],
+        "tried_video_ids": [
+          "dQw4w9WgXcQ"
+        ],
+        "search_provider_calls": 1,
+        "transcript_provider_calls": 1,
+        "youtube_http_calls": 0,
+        "youtube_quota_units": 0,
+        "transcript_http_calls": 0,
+        "search_cache_hits": 0,
+        "transcript_cache_hits": 0
+      },
+      "max_plan_task_characters": 10366,
+      "max_retrieved_characters": 2888,
+      "synthetic_preparation_seconds": 1.2401249408721924,
+      "completion_reason": "target_met",
+      "failure_reason": null
+    },
+    {
+      "requested_seconds": 60,
+      "fake_ms_per_word": 430,
+      "measured_media_ms": 58050,
+      "practice_allowance_ms": 0,
+      "final_content_ms": 58050,
+      "utilisation": 0.9675,
+      "shorts": 3,
+      "unique_outcomes": 3,
+      "mapped_coverage_entries": 3,
+      "plan_calls": 2,
+      "model_logical_calls": 8,
+      "reserved_model_call_units": 24,
+      "acquisition": {
+        "round_limit": 2,
+        "transcript_limit": 16,
+        "per_round_limit": 8,
+        "rounds": [
+          {
+            "query": "Understand database index design and tradeoffs for beginners",
+            "completed": true,
+            "candidates": [
+              {
+                "video_id": "dQw4w9WgXcQ",
+                "title": "Test-only YouTube source",
+                "channel": "Test channel"
+              }
+            ],
+            "source_ids": [
+              "src_test_dQw4w9WgXcQ"
+            ],
+            "transcript_attempts": 1
+          }
+        ],
+        "tried_video_ids": [
+          "dQw4w9WgXcQ"
+        ],
+        "search_provider_calls": 1,
+        "transcript_provider_calls": 1,
+        "youtube_http_calls": 0,
+        "youtube_quota_units": 0,
+        "transcript_http_calls": 0,
+        "search_cache_hits": 0,
+        "transcript_cache_hits": 0
+      },
+      "max_plan_task_characters": 8582,
+      "max_retrieved_characters": 2883,
+      "synthetic_preparation_seconds": 0.03746294975280762,
+      "completion_reason": "target_met",
+      "failure_reason": null
+    },
+    {
+      "requested_seconds": 73,
+      "fake_ms_per_word": 430,
+      "measured_media_ms": 70950,
+      "practice_allowance_ms": 0,
+      "final_content_ms": 70950,
+      "utilisation": 0.9719178082191781,
+      "shorts": 3,
+      "unique_outcomes": 3,
+      "mapped_coverage_entries": 3,
+      "plan_calls": 2,
+      "model_logical_calls": 8,
+      "reserved_model_call_units": 24,
+      "acquisition": {
+        "round_limit": 2,
+        "transcript_limit": 16,
+        "per_round_limit": 8,
+        "rounds": [
+          {
+            "query": "Understand database index design and tradeoffs for beginners",
+            "completed": true,
+            "candidates": [
+              {
+                "video_id": "dQw4w9WgXcQ",
+                "title": "Test-only YouTube source",
+                "channel": "Test channel"
+              }
+            ],
+            "source_ids": [
+              "src_test_dQw4w9WgXcQ"
+            ],
+            "transcript_attempts": 1
+          }
+        ],
+        "tried_video_ids": [
+          "dQw4w9WgXcQ"
+        ],
+        "search_provider_calls": 1,
+        "transcript_provider_calls": 1,
+        "youtube_http_calls": 0,
+        "youtube_quota_units": 0,
+        "transcript_http_calls": 0,
+        "search_cache_hits": 0,
+        "transcript_cache_hits": 0
+      },
+      "max_plan_task_characters": 8582,
+      "max_retrieved_characters": 2883,
+      "synthetic_preparation_seconds": 0.040513038635253906,
+      "completion_reason": "target_met",
+      "failure_reason": null
+    },
+    {
+      "requested_seconds": 120,
+      "fake_ms_per_word": 430,
+      "measured_media_ms": 117820,
+      "practice_allowance_ms": 0,
+      "final_content_ms": 117820,
+      "utilisation": 0.9818333333333333,
+      "shorts": 5,
+      "unique_outcomes": 5,
+      "mapped_coverage_entries": 5,
+      "plan_calls": 2,
+      "model_logical_calls": 12,
+      "reserved_model_call_units": 36,
+      "acquisition": {
+        "round_limit": 2,
+        "transcript_limit": 16,
+        "per_round_limit": 8,
+        "rounds": [
+          {
+            "query": "Understand database index design and tradeoffs for beginners",
+            "completed": true,
+            "candidates": [
+              {
+                "video_id": "dQw4w9WgXcQ",
+                "title": "Test-only YouTube source",
+                "channel": "Test channel"
+              }
+            ],
+            "source_ids": [
+              "src_test_dQw4w9WgXcQ"
+            ],
+            "transcript_attempts": 1
+          }
+        ],
+        "tried_video_ids": [
+          "dQw4w9WgXcQ"
+        ],
+        "search_provider_calls": 1,
+        "transcript_provider_calls": 1,
+        "youtube_http_calls": 0,
+        "youtube_quota_units": 0,
+        "transcript_http_calls": 0,
+        "search_cache_hits": 0,
+        "transcript_cache_hits": 0
+      },
+      "max_plan_task_characters": 9054,
+      "max_retrieved_characters": 2886,
+      "synthetic_preparation_seconds": 0.07791996002197266,
+      "completion_reason": "target_met",
+      "failure_reason": null
+    },
+    {
+      "requested_seconds": 137,
+      "fake_ms_per_word": 430,
+      "measured_media_ms": 135020,
+      "practice_allowance_ms": 0,
+      "final_content_ms": 135020,
+      "utilisation": 0.9855474452554744,
+      "shorts": 5,
+      "unique_outcomes": 5,
+      "mapped_coverage_entries": 5,
+      "plan_calls": 2,
+      "model_logical_calls": 12,
+      "reserved_model_call_units": 36,
+      "acquisition": {
+        "round_limit": 2,
+        "transcript_limit": 16,
+        "per_round_limit": 8,
+        "rounds": [
+          {
+            "query": "Understand database index design and tradeoffs for beginners",
+            "completed": true,
+            "candidates": [
+              {
+                "video_id": "dQw4w9WgXcQ",
+                "title": "Test-only YouTube source",
+                "channel": "Test channel"
+              }
+            ],
+            "source_ids": [
+              "src_test_dQw4w9WgXcQ"
+            ],
+            "transcript_attempts": 1
+          }
+        ],
+        "tried_video_ids": [
+          "dQw4w9WgXcQ"
+        ],
+        "search_provider_calls": 1,
+        "transcript_provider_calls": 1,
+        "youtube_http_calls": 0,
+        "youtube_quota_units": 0,
+        "transcript_http_calls": 0,
+        "search_cache_hits": 0,
+        "transcript_cache_hits": 0
+      },
+      "max_plan_task_characters": 9054,
+      "max_retrieved_characters": 2886,
+      "synthetic_preparation_seconds": 0.0666189193725586,
+      "completion_reason": "target_met",
+      "failure_reason": null
+    },
+    {
+      "requested_seconds": 300,
+      "fake_ms_per_word": 430,
+      "measured_media_ms": 258000,
+      "practice_allowance_ms": 40000,
+      "final_content_ms": 298000,
+      "utilisation": 0.9933333333333333,
+      "shorts": 9,
+      "unique_outcomes": 9,
+      "mapped_coverage_entries": 9,
+      "plan_calls": 3,
+      "model_logical_calls": 21,
+      "reserved_model_call_units": 63,
+      "acquisition": {
+        "round_limit": 2,
+        "transcript_limit": 16,
+        "per_round_limit": 8,
+        "rounds": [
+          {
+            "query": "Understand database index design and tradeoffs for beginners",
+            "completed": true,
+            "candidates": [
+              {
+                "video_id": "dQw4w9WgXcQ",
+                "title": "Test-only YouTube source",
+                "channel": "Test channel"
+              }
+            ],
+            "source_ids": [
+              "src_test_dQw4w9WgXcQ"
+            ],
+            "transcript_attempts": 1
+          }
+        ],
+        "tried_video_ids": [
+          "dQw4w9WgXcQ"
+        ],
+        "search_provider_calls": 1,
+        "transcript_provider_calls": 1,
+        "youtube_http_calls": 0,
+        "youtube_quota_units": 0,
+        "transcript_http_calls": 0,
+        "search_cache_hits": 0,
+        "transcript_cache_hits": 0
+      },
+      "max_plan_task_characters": 9308,
+      "max_retrieved_characters": 2886,
+      "synthetic_preparation_seconds": 0.13759708404541016,
+      "completion_reason": "target_met",
+      "failure_reason": null
+    },
+    {
+      "requested_seconds": 600,
+      "fake_ms_per_word": 430,
+      "measured_media_ms": 497940,
+      "practice_allowance_ms": 100000,
+      "final_content_ms": 597940,
+      "utilisation": 0.9965666666666667,
+      "shorts": 18,
+      "unique_outcomes": 18,
+      "mapped_coverage_entries": 18,
+      "plan_calls": 5,
+      "model_logical_calls": 41,
+      "reserved_model_call_units": 123,
+      "acquisition": {
+        "round_limit": 2,
+        "transcript_limit": 16,
+        "per_round_limit": 8,
+        "rounds": [
+          {
+            "query": "Understand database index design and tradeoffs for beginners",
+            "completed": true,
+            "candidates": [
+              {
+                "video_id": "dQw4w9WgXcQ",
+                "title": "Test-only YouTube source",
+                "channel": "Test channel"
+              }
+            ],
+            "source_ids": [
+              "src_test_dQw4w9WgXcQ"
+            ],
+            "transcript_attempts": 1
+          }
+        ],
+        "tried_video_ids": [
+          "dQw4w9WgXcQ"
+        ],
+        "search_provider_calls": 1,
+        "transcript_provider_calls": 1,
+        "youtube_http_calls": 0,
+        "youtube_quota_units": 0,
+        "transcript_http_calls": 0,
+        "search_cache_hits": 0,
+        "transcript_cache_hits": 0
+      },
+      "max_plan_task_characters": 9614,
+      "max_retrieved_characters": 2886,
+      "synthetic_preparation_seconds": 0.3870871067047119,
+      "completion_reason": "target_met",
+      "failure_reason": null
+    },
+    {
+      "requested_seconds": 1200,
+      "fake_ms_per_word": 430,
+      "measured_media_ms": 904290,
+      "practice_allowance_ms": 200000,
+      "final_content_ms": 1104290,
+      "utilisation": 0.9202416666666666,
+      "shorts": 32,
+      "unique_outcomes": 32,
+      "mapped_coverage_entries": 32,
+      "plan_calls": 8,
+      "model_logical_calls": 72,
+      "reserved_model_call_units": 216,
+      "acquisition": {
+        "round_limit": 2,
+        "transcript_limit": 16,
+        "per_round_limit": 8,
+        "rounds": [
+          {
+            "query": "Understand database index design and tradeoffs for beginners",
+            "completed": true,
+            "candidates": [
+              {
+                "video_id": "dQw4w9WgXcQ",
+                "title": "Test-only YouTube source",
+                "channel": "Test channel"
+              }
+            ],
+            "source_ids": [
+              "src_test_dQw4w9WgXcQ"
+            ],
+            "transcript_attempts": 1
+          }
+        ],
+        "tried_video_ids": [
+          "dQw4w9WgXcQ"
+        ],
+        "search_provider_calls": 1,
+        "transcript_provider_calls": 1,
+        "youtube_http_calls": 0,
+        "youtube_quota_units": 0,
+        "transcript_http_calls": 0,
+        "search_cache_hits": 0,
+        "transcript_cache_hits": 0
+      },
+      "max_plan_task_characters": 10064,
+      "max_retrieved_characters": 2888,
+      "synthetic_preparation_seconds": 0.964104413986206,
+      "completion_reason": "target_met",
+      "failure_reason": null
+    },
+    {
+      "requested_seconds": 60,
+      "fake_ms_per_word": 550,
+      "measured_media_ms": 57750,
+      "practice_allowance_ms": 0,
+      "final_content_ms": 57750,
+      "utilisation": 0.9625,
+      "shorts": 2,
+      "unique_outcomes": 2,
+      "mapped_coverage_entries": 2,
+      "plan_calls": 1,
+      "model_logical_calls": 5,
+      "reserved_model_call_units": 15,
+      "acquisition": {
+        "round_limit": 2,
+        "transcript_limit": 16,
+        "per_round_limit": 8,
+        "rounds": [
+          {
+            "query": "Understand database index design and tradeoffs for beginners",
+            "completed": true,
+            "candidates": [
+              {
+                "video_id": "dQw4w9WgXcQ",
+                "title": "Test-only YouTube source",
+                "channel": "Test channel"
+              }
+            ],
+            "source_ids": [
+              "src_test_dQw4w9WgXcQ"
+            ],
+            "transcript_attempts": 1
+          }
+        ],
+        "tried_video_ids": [
+          "dQw4w9WgXcQ"
+        ],
+        "search_provider_calls": 1,
+        "transcript_provider_calls": 1,
+        "youtube_http_calls": 0,
+        "youtube_quota_units": 0,
+        "transcript_http_calls": 0,
+        "search_cache_hits": 0,
+        "transcript_cache_hits": 0
+      },
+      "max_plan_task_characters": 8250,
+      "max_retrieved_characters": 2876,
+      "synthetic_preparation_seconds": 0.028025150299072266,
+      "completion_reason": "target_met",
+      "failure_reason": null
+    },
+    {
+      "requested_seconds": 73,
+      "fake_ms_per_word": 550,
+      "measured_media_ms": 70950,
+      "practice_allowance_ms": 0,
+      "final_content_ms": 70950,
+      "utilisation": 0.9719178082191781,
+      "shorts": 3,
+      "unique_outcomes": 3,
+      "mapped_coverage_entries": 3,
+      "plan_calls": 2,
+      "model_logical_calls": 8,
+      "reserved_model_call_units": 24,
+      "acquisition": {
+        "round_limit": 2,
+        "transcript_limit": 16,
+        "per_round_limit": 8,
+        "rounds": [
+          {
+            "query": "Understand database index design and tradeoffs for beginners",
+            "completed": true,
+            "candidates": [
+              {
+                "video_id": "dQw4w9WgXcQ",
+                "title": "Test-only YouTube source",
+                "channel": "Test channel"
+              }
+            ],
+            "source_ids": [
+              "src_test_dQw4w9WgXcQ"
+            ],
+            "transcript_attempts": 1
+          }
+        ],
+        "tried_video_ids": [
+          "dQw4w9WgXcQ"
+        ],
+        "search_provider_calls": 1,
+        "transcript_provider_calls": 1,
+        "youtube_http_calls": 0,
+        "youtube_quota_units": 0,
+        "transcript_http_calls": 0,
+        "search_cache_hits": 0,
+        "transcript_cache_hits": 0
+      },
+      "max_plan_task_characters": 8582,
+      "max_retrieved_characters": 2883,
+      "synthetic_preparation_seconds": 0.040306806564331055,
+      "completion_reason": "target_met",
+      "failure_reason": null
+    },
+    {
+      "requested_seconds": 120,
+      "fake_ms_per_word": 550,
+      "measured_media_ms": 118250,
+      "practice_allowance_ms": 0,
+      "final_content_ms": 118250,
+      "utilisation": 0.9854166666666667,
+      "shorts": 4,
+      "unique_outcomes": 4,
+      "mapped_coverage_entries": 4,
+      "plan_calls": 1,
+      "model_logical_calls": 9,
+      "reserved_model_call_units": 27,
+      "acquisition": {
+        "round_limit": 2,
+        "transcript_limit": 16,
+        "per_round_limit": 8,
+        "rounds": [
+          {
+            "query": "Understand database index design and tradeoffs for beginners",
+            "completed": true,
+            "candidates": [
+              {
+                "video_id": "dQw4w9WgXcQ",
+                "title": "Test-only YouTube source",
+                "channel": "Test channel"
+              }
+            ],
+            "source_ids": [
+              "src_test_dQw4w9WgXcQ"
+            ],
+            "transcript_attempts": 1
+          }
+        ],
+        "tried_video_ids": [
+          "dQw4w9WgXcQ"
+        ],
+        "search_provider_calls": 1,
+        "transcript_provider_calls": 1,
+        "youtube_http_calls": 0,
+        "youtube_quota_units": 0,
+        "transcript_http_calls": 0,
+        "search_cache_hits": 0,
+        "transcript_cache_hits": 0
+      },
+      "max_plan_task_characters": 8253,
+      "max_retrieved_characters": 2876,
+      "synthetic_preparation_seconds": 0.05027270317077637,
+      "completion_reason": "target_met",
+      "failure_reason": null
+    },
+    {
+      "requested_seconds": 137,
+      "fake_ms_per_word": 550,
+      "measured_media_ms": 134750,
+      "practice_allowance_ms": 0,
+      "final_content_ms": 134750,
+      "utilisation": 0.9835766423357665,
+      "shorts": 5,
+      "unique_outcomes": 5,
+      "mapped_coverage_entries": 5,
+      "plan_calls": 2,
+      "model_logical_calls": 12,
+      "reserved_model_call_units": 36,
+      "acquisition": {
+        "round_limit": 2,
+        "transcript_limit": 16,
+        "per_round_limit": 8,
+        "rounds": [
+          {
+            "query": "Understand database index design and tradeoffs for beginners",
+            "completed": true,
+            "candidates": [
+              {
+                "video_id": "dQw4w9WgXcQ",
+                "title": "Test-only YouTube source",
+                "channel": "Test channel"
+              }
+            ],
+            "source_ids": [
+              "src_test_dQw4w9WgXcQ"
+            ],
+            "transcript_attempts": 1
+          }
+        ],
+        "tried_video_ids": [
+          "dQw4w9WgXcQ"
+        ],
+        "search_provider_calls": 1,
+        "transcript_provider_calls": 1,
+        "youtube_http_calls": 0,
+        "youtube_quota_units": 0,
+        "transcript_http_calls": 0,
+        "search_cache_hits": 0,
+        "transcript_cache_hits": 0
+      },
+      "max_plan_task_characters": 9054,
+      "max_retrieved_characters": 2886,
+      "synthetic_preparation_seconds": 0.06905317306518555,
+      "completion_reason": "target_met",
+      "failure_reason": null
+    },
+    {
+      "requested_seconds": 300,
+      "fake_ms_per_word": 550,
+      "measured_media_ms": 257950,
+      "practice_allowance_ms": 40000,
+      "final_content_ms": 297950,
+      "utilisation": 0.9931666666666666,
+      "shorts": 9,
+      "unique_outcomes": 9,
+      "mapped_coverage_entries": 9,
+      "plan_calls": 3,
+      "model_logical_calls": 21,
+      "reserved_model_call_units": 63,
+      "acquisition": {
+        "round_limit": 2,
+        "transcript_limit": 16,
+        "per_round_limit": 8,
+        "rounds": [
+          {
+            "query": "Understand database index design and tradeoffs for beginners",
+            "completed": true,
+            "candidates": [
+              {
+                "video_id": "dQw4w9WgXcQ",
+                "title": "Test-only YouTube source",
+                "channel": "Test channel"
+              }
+            ],
+            "source_ids": [
+              "src_test_dQw4w9WgXcQ"
+            ],
+            "transcript_attempts": 1
+          }
+        ],
+        "tried_video_ids": [
+          "dQw4w9WgXcQ"
+        ],
+        "search_provider_calls": 1,
+        "transcript_provider_calls": 1,
+        "youtube_http_calls": 0,
+        "youtube_quota_units": 0,
+        "transcript_http_calls": 0,
+        "search_cache_hits": 0,
+        "transcript_cache_hits": 0
+      },
+      "max_plan_task_characters": 9308,
+      "max_retrieved_characters": 2886,
+      "synthetic_preparation_seconds": 0.13374114036560059,
+      "completion_reason": "target_met",
+      "failure_reason": null
+    },
+    {
+      "requested_seconds": 600,
+      "fake_ms_per_word": 550,
+      "measured_media_ms": 466400,
+      "practice_allowance_ms": 100000,
+      "final_content_ms": 566400,
+      "utilisation": 0.944,
+      "shorts": 16,
+      "unique_outcomes": 16,
+      "mapped_coverage_entries": 16,
+      "plan_calls": 4,
+      "model_logical_calls": 36,
+      "reserved_model_call_units": 108,
+      "acquisition": {
+        "round_limit": 2,
+        "transcript_limit": 16,
+        "per_round_limit": 8,
+        "rounds": [
+          {
+            "query": "Understand database index design and tradeoffs for beginners",
+            "completed": true,
+            "candidates": [
+              {
+                "video_id": "dQw4w9WgXcQ",
+                "title": "Test-only YouTube source",
+                "channel": "Test channel"
+              }
+            ],
+            "source_ids": [
+              "src_test_dQw4w9WgXcQ"
+            ],
+            "transcript_attempts": 1
+          }
+        ],
+        "tried_video_ids": [
+          "dQw4w9WgXcQ"
+        ],
+        "search_provider_calls": 1,
+        "transcript_provider_calls": 1,
+        "youtube_http_calls": 0,
+        "youtube_quota_units": 0,
+        "transcript_http_calls": 0,
+        "search_cache_hits": 0,
+        "transcript_cache_hits": 0
+      },
+      "max_plan_task_characters": 9469,
+      "max_retrieved_characters": 2886,
+      "synthetic_preparation_seconds": 0.3598191738128662,
+      "completion_reason": "target_met",
+      "failure_reason": null
+    },
+    {
+      "requested_seconds": 1200,
+      "fake_ms_per_word": 550,
+      "measured_media_ms": 915200,
+      "practice_allowance_ms": 200000,
+      "final_content_ms": 1115200,
+      "utilisation": 0.9293333333333333,
+      "shorts": 32,
+      "unique_outcomes": 32,
+      "mapped_coverage_entries": 32,
+      "plan_calls": 8,
+      "model_logical_calls": 72,
+      "reserved_model_call_units": 216,
+      "acquisition": {
+        "round_limit": 2,
+        "transcript_limit": 16,
+        "per_round_limit": 8,
+        "rounds": [
+          {
+            "query": "Understand database index design and tradeoffs for beginners",
+            "completed": true,
+            "candidates": [
+              {
+                "video_id": "dQw4w9WgXcQ",
+                "title": "Test-only YouTube source",
+                "channel": "Test channel"
+              }
+            ],
+            "source_ids": [
+              "src_test_dQw4w9WgXcQ"
+            ],
+            "transcript_attempts": 1
+          }
+        ],
+        "tried_video_ids": [
+          "dQw4w9WgXcQ"
+        ],
+        "search_provider_calls": 1,
+        "transcript_provider_calls": 1,
+        "youtube_http_calls": 0,
+        "youtube_quota_units": 0,
+        "transcript_http_calls": 0,
+        "search_cache_hits": 0,
+        "transcript_cache_hits": 0
+      },
+      "max_plan_task_characters": 10064,
+      "max_retrieved_characters": 2888,
+      "synthetic_preparation_seconds": 0.849658727645874,
+      "completion_reason": "target_met",
+      "failure_reason": null
+    }
+  ]
+}

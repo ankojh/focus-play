@@ -1,4 +1,6 @@
 {
+  "target_duration_ms": 40000,
+  "duration_uncertainty_ms": 0,
   "concept_id": null,
   "learning_outcome": null,
   "teaching_role": null,

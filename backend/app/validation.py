@@ -131,7 +131,8 @@ def validate_draft(draft: ShortDraft, segments, require_question: bool, earlier=
 
 
 def planned_duration(shorts):
-    return sum((s.measured_duration_ms if s.status == "ready" else 40000) + (20000 if (s.question is not None or s.question_required) else 0) for i, s in enumerate(shorts))
+    from .planning import aggregate
+    return aggregate(shorts).forecast_total_ms
 
 
 def verify_support(model, draft, segments, cancel, teaching=None):

@@ -22,7 +22,7 @@ Cancellation sets a thread event, cancels queued work, and closes active model s
 
 On server start, interrupted jobs are marked explicitly. They need a user retry; they do not start silently. A retry preserves complete ready outputs and reuses validated draft and speech caches when their keys match. It rechecks the current local model settings. Settings recorded on each ready short explain which model and voice produced it.
 
-Required content reserves up to 40 seconds per unfinished short plus 20 seconds for every third required short's question. Measured durations replace those reservations. Optional explanations need an explicit 40-second additional allowance and are limited to three per lesson. Question reservations belong to their original short, so inserting an extra short does not move the question.
+New lessons use the [versioned session ledger and adaptive planning policy](session-duration.md): explicit per-activity media targets, measured ready speech, one 20-second allowance per planned checkpoint, and closing reserved once. Checkpoints are useful curriculum boundaries, not a positional every-third-short rule. Bounded batches can add distinct source-supported extensions within the original time budget; published shorts stay immutable. Legacy unready items retain 40-second defaults. Optional explanations still require an explicit, separate 40-second additional allowance and are limited to three per lesson. Question reservations belong to their stable original activity, so inserting extra work does not move or double-count the allowance.
 
 ## Local boundary
 

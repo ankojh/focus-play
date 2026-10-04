@@ -53,6 +53,43 @@ test('teaching outcomes and planned practice allowances are visible without a ti
   await page.getByRole('button',{name:'A row',exact:true}).click();await expect(page.locator('.question [role="status"]')).toContainText('Correct.');
 });
 
+test('final session copy explains measured videos, practice and coverage shortfall',async({page})=>{
+  const lesson=makeLesson() as any;
+  lesson.planning={version:2,completion_reason:'coverage_exhausted',completion_detail:'Available sources support only lookup and scans.'};
+  lesson.duration_ledger={version:2,measured_ready_media_ms:60000,reserved_practice_ms:20000,estimated_unready_media_ms:0,reserved_closing_ms:0,forecast_total_ms:80000,final_content_ms:80000,original_content_ms:80000,extra_content_ms:0,utilisation:80000/300000,shortfall_ms:190000};
+  lesson.planned_duration_ms=80000;
+  await mock(page,lesson);await start(page);
+  await expect(page.getByTestId('session-duration')).toHaveText('About 1:20 of videos and practice for your 5:00 session');
+  await expect(page.locator('.lesson-heading')).toContainText('Measured ready video 1:00');
+  await expect(page.locator('.lesson-heading')).toContainText('Scheduled practice allowance 0:20');
+  await expect(page.getByTestId('session-shortfall')).toContainText('27% of the original budget');
+  await expect(page.getByTestId('session-shortfall')).toContainText(lesson.planning.completion_detail);
+  await expect(page.getByTestId('session-shortfall')).toContainText('No repeated loops or generation wait counted');
+  await expect(page.locator('audio')).toHaveAttribute('loop','');
+});
+
+test('forecast and expanding outline update without moving the selected ready short',async({page})=>{
+  const lesson=makeLesson() as any;
+  lesson.job.status='running';lesson.status='partially_ready';lesson.job.stage='expanding the lesson outline';
+  lesson.planning={version:2,revision:1,completion_reason:null};
+  lesson.duration_ledger={version:2,measured_ready_media_ms:60000,reserved_practice_ms:0,estimated_unready_media_ms:0,reserved_closing_ms:0,forecast_total_ms:60000,final_content_ms:null,original_content_ms:60000,extra_content_ms:0,utilisation:.2,shortfall_ms:210000};
+  await mock(page,lesson);await start(page);
+  await page.getByRole('button',{name:'Next short'}).click();
+  await expect(page.locator('.player h2')).toHaveText('Understand an index two');
+  const audio=await page.locator('audio').elementHandle();
+  await expect(page.getByTestId('session-duration')).toContainText('Current estimate: about 1:00');
+  await expect(page.locator('.lesson-heading')).toContainText('Outline may expand');
+  lesson.shorts.push({...makeShort('extension'),status:'queued',curriculum_role:'extension',measured_duration_ms:0});
+  lesson.short_ids.push('extension');lesson.job.event_sequence=5;lesson.planning.revision=2;
+  lesson.duration_ledger.forecast_total_ms=90000;lesson.duration_ledger.estimated_unready_media_ms=30000;
+  await expect(page.locator('.outline-item')).toHaveCount(3,{timeout:10000});
+  await expect(page.getByTestId('session-duration')).toContainText('Current estimate: about 1:30');
+  await expect(page.locator('.outline-item.current')).toContainText('Understand an index two');
+  await expect(page.locator('.player h2')).toHaveText('Understand an index two');
+  expect(await audio!.evaluate((a:HTMLAudioElement)=>a.isConnected)).toBe(true);
+  await expect(page.getByTestId('session-shortfall')).toHaveCount(0);
+});
+
 test('library replaces sidebar sources and create, and branding has no Local labels',async({page})=>{
   await mock(page,makeLesson(),{saved:true});await page.goto('/');
   const nav=page.getByRole('navigation',{name:'Main navigation'});

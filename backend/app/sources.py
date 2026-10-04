@@ -88,14 +88,15 @@ def stems(text: str) -> set[str]:
     return {w[:5] for w in re.findall(r"[a-z0-9]+", text.lower()) if w not in STOP}
 
 
-def retrieve(sources: list[Source], goal: str, limit: int = 20, budget: int = 4500, required_ids=()) -> list[TranscriptSegment]:
+def retrieve(sources: list[Source], goal: str, limit: int = 20, budget: int = 4500, required_ids=(), excluded_ids=()) -> list[TranscriptSegment]:
     """Pick the passages that best teach the goal, shared across videos, each with the passage that follows it."""
     words = stems(goal)
+    excluded = set(excluded_ids)
     def score(segment):
         return len(words & stems(segment.text)) - (3 if FILLER.search(segment.text) else 0)
     queues = []
     for source in sources:
-        ranked = sorted(range(len(source.segments)), key=lambda i: (-score(source.segments[i]), i))
+        ranked = sorted(range(len(source.segments)), key=lambda i: (source.segments[i].id in excluded, -score(source.segments[i]), i))
         queues.append([source.segments, [i for i in ranked if score(source.segments[i]) > 0]])
     chosen, length = {}, 0
     required = set(required_ids)
@@ -151,10 +152,12 @@ def iso_seconds(value: str) -> int | None:
     return ((days * 24 + hours) * 60 + minutes) * 60 + seconds
 
 
-def search_youtube(query: str, key: str) -> list[dict]:
+def search_youtube(query: str, key: str, audit=None) -> list[dict]:
     if not key:
         raise AppError("YOUTUBE_KEY_MISSING", "YouTube search needs YOUTUBE_API_KEY in the server .env file. Add the key, restart the server, then retry.", 503)
     # search.list costs 100 quota units regardless of maxResults; videos.list costs 1.
+    if audit:
+        audit("youtube_search")
     response = youtube_get("search", {"key": key, "part": "snippet", "type": "video", "maxResults": SEARCH_RESULTS, "relevanceLanguage": "en", "q": query})
     results = []
     try:
@@ -166,6 +169,8 @@ def search_youtube(query: str, key: str) -> list[dict]:
         raise AppError("SOURCE_SEARCH_FAILED", "YouTube returned invalid search data. Retry to search again.",503) from None
     if not results:
         return results
+    if audit:
+        audit("youtube_details")
     details = youtube_get("videos", {"key": key, "part": "contentDetails", "id": ",".join(r["video_id"] for r in results)})
     try:
         durations = {item["id"]: iso_seconds(item["contentDetails"]["duration"]) for item in details.json().get("items", [])}

@@ -15,8 +15,8 @@ from .contracts import ProviderHealth, NarrationUnit
 from .icons import ICONS
 from .errors import AppError, Cancelled
 
-PROMPT_VERSION = "19"
-SCHEMA_VERSION = "5-mixed-visuals"
+PROMPT_VERSION = "20"
+SCHEMA_VERSION = "6-session-planning"
 
 
 def check_cancel(cancel: threading.Event):
@@ -107,10 +107,13 @@ class Ollama:
             schema["properties"]["question"] = {"$ref": "#/$defs/ModelQuestion"} if task["question_required"] else {"type": "null"}
         if contract.__name__ == "SupportCheck" and task.get("teaching"):
             schema["required"] = list(schema["properties"])
-        if contract.__name__ == "LessonPlan" and task.get("plan_version") == 2:
+        if contract.__name__ == "LessonPlan" and task.get("plan_version") in {2, 3}:
             objective = schema["$defs"]["Objective"]
             objective["required"] = list(objective["properties"])
-            objective["properties"]["target_duration_ms"]["const"] = 40000
+            if task.get("plan_version") == 2:
+                objective["properties"]["target_duration_ms"]["const"] = 40000
+            else:
+                objective["properties"]["target_duration_ms"].update(minimum=15000, maximum=task["max_target_ms"])
             for field in ("concept_id", "learning_outcome"):
                 objective["properties"][field] = next(item for item in objective["properties"][field]["anyOf"] if item.get("type") == "string")
             objective["properties"]["evidence_segment_ids"].update(minItems=1, items={"type": "string", "enum": [s["id"] for s in task["segments"]]})

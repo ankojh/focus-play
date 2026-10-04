@@ -197,6 +197,8 @@ def test_new_planner_schema_requires_outcomes_but_legacy_lessons_load(monkeypatc
     loaded = Lesson.model_validate(saved.model_dump())
     assert loaded.teaching_plan_version == 1 and loaded.coverage_history == []
     assert loaded.shorts[0] == ready
+    assert loaded.planning is None and loaded.duration_ledger is None
+    assert loaded.shorts[0].target_duration_ms == 40000
 
 
 def test_teaching_review_repair_is_bounded_and_dimensions_are_separate(tmp_path):

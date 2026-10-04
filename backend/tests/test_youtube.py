@@ -79,7 +79,9 @@ def test_unavailable_captions_try_other_videos_with_bounded_limits(tmp_path):
         assert len(provider.searches)==2 and len(provider.fetches)==8 and model.calls==0
         assert client.post(f'/api/lessons/{lid}/retry',json={}).status_code==202
         wait_for(client,lid,'failed')
-        assert len(provider.fetches)==16
+        # Automatic retry cannot reset the persisted per-lesson credit allowance.
+        assert len(provider.fetches)==8 and len(provider.searches)==2
+        assert client.get(f'/api/lessons/{lid}').json()['acquisition']==failed['acquisition']
 
 
 def test_insufficient_plan_searches_again_before_generating(tmp_path):

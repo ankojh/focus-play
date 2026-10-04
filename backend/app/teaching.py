@@ -10,19 +10,19 @@ HISTORY_ITEMS = 12
 HISTORY_CHARS = 4800
 
 
-def validate_plan(plan, segments, max_shorts, budget_ms):
+def validate_plan(plan, segments, max_shorts, budget_ms, *, calibrated=False, previous=(), examples_before=()):
     if not plan.sufficient_evidence:
         if plan.objectives or plan.examples:
             raise ValueError("An unsupported plan must have no objectives or examples.")
         return
-    if not 1 <= len(plan.objectives) <= max_shorts:
+    if not (0 if previous else 1) <= len(plan.objectives) <= max_shorts:
         raise ValueError(f"Use 1 to {max_shorts} ordered objectives.")
     known = {s.id: s for s in segments}
     ids = [o.concept_id for o in plan.objectives]
-    if None in ids or len(set(ids)) != len(ids):
+    if None in ids or len(set(ids)) != len(ids) or set(ids).intersection(o.concept_id for o in previous):
         raise ValueError("Every concept needs a stable unique concept_id.")
-    examples = {e.id: e for e in plan.examples}
-    if len(examples) != len(plan.examples):
+    examples = {e.id: e for e in (*examples_before, *plan.examples)}
+    if len(examples) != len(examples_before) + len(plan.examples):
         raise ValueError("Example IDs must be unique.")
     for example in plan.examples:
         if any(sid not in known for sid in example.evidence_segment_ids):
@@ -32,11 +32,11 @@ def validate_plan(plan, segments, max_shorts, budget_ms):
             raise ValueError("Example facts must be exact source excerpts; synthetic facts are not permitted.")
         if any(not any(entity.casefold() in text.casefold() for text in passages) for entity in example.entities):
             raise ValueError("Example entities must already occur in its evidence.")
-    earlier = {}
+    earlier = {o.concept_id: o for o in previous}
     closing_seen = False
     for objective in plan.objectives:
-        if objective.target_duration_ms != 40000:
-            raise ValueError("Use the 40000ms duration reservation until calibrated duration planning is available.")
+        if (not calibrated and objective.target_duration_ms != 40000) or (calibrated and objective.target_duration_ms < 15000):
+            raise ValueError("Use a useful target duration of at least 15000ms for calibrated plans, or the legacy 40000ms reservation.")
         if not objective.learning_outcome or not objective.relevance or not objective.visual_intent:
             raise ValueError("Supply an observable learning_outcome, learner relevance and visual intent.")
         # An observable action is required; this is a structural guard, not a quality score.
@@ -60,8 +60,7 @@ def validate_plan(plan, segments, max_shorts, budget_ms):
             raise ValueError("Closing activities must follow all core and extension activities.")
         closing_seen |= objective.curriculum_role == "closing"
         earlier[objective.concept_id] = objective
-    # Use the existing conservative speech cap until the duration workstream supplies predictions.
-    if sum(40000 + (20000 if o.checkpoint else 0) for o in plan.objectives) > budget_ms:
+    if sum(o.target_duration_ms + (20000 if o.checkpoint else 0) for o in plan.objectives) > budget_ms:
         raise ValueError("Teaching and planned 20-second practice allowances exceed the session budget.")
 
 
@@ -69,7 +68,8 @@ def planned_shorts(plan, make_id):
     return [Short(id=make_id(), objective=o.title, prerequisites=o.prerequisites,
                   concept_id=o.concept_id, learning_outcome=o.learning_outcome,
                   teaching_role=o.teaching_role, curriculum_role=o.curriculum_role,
-                  example_id=o.example_id, question_required=o.checkpoint) for o in plan.objectives]
+                  example_id=o.example_id, question_required=o.checkpoint,
+                  target_duration_ms=o.target_duration_ms) for o in plan.objectives]
 
 
 def objective_for(lesson, short):
@@ -113,7 +113,7 @@ def record_coverage(lesson, short):
         return  # Do not silently migrate legacy ready media.
     entry = CoverageEntry(short_id=short.id, concept_id=short.concept_id,
                           learning_outcome=short.learning_outcome, teaching_role=short.teaching_role,
-                          claim_summary=normalize("; ".join(u.purpose or u.text for u in short.narration_units))[:240],
+                          claim_summary=normalize("; ".join(u.text for u in short.narration_units))[:240],
                           evidence_segment_ids=list(dict.fromkeys(sid for ref in short.evidence_references for sid in ref.segment_ids))[:20],
                           example_id=short.example_id, adds_coverage=short.teaching_role != "recap")
     # Idempotent across a missing-media retry, published in the same lesson snapshot as ready output.

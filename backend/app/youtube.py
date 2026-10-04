@@ -82,7 +82,7 @@ def source_from_transcript(candidate, data):
     return source
 
 
-def fetch_supadata(vid,key,cancel):
+def fetch_supadata(vid,key,cancel,audit=None):
     if not key:
         raise AppError("TRANSCRIPT_ACCESS_REQUIRED","Video transcripts need SUPADATA_API_KEY in the server .env file. Add the key, restart the server, then retry.",503)
     with _throttle:
@@ -93,13 +93,15 @@ def fetch_supadata(vid,key,cancel):
         _last_request[0]=time.monotonic()
     # Native mode only returns existing captions. Generated transcripts cost extra credits.
     # chunkSize keeps each row within the 280 character passage bound.
+    if audit:
+        audit("supadata")
     try:
         response=httpx.get(SUPADATA_URL,params={"url":f"https://www.youtube.com/watch?v={vid}","lang":"en","mode":"native","chunkSize":250},
             headers={"x-api-key":key},timeout=30,follow_redirects=False,trust_env=False)
     except httpx.TimeoutException:
         raise AppError("TRANSCRIPT_TIMEOUT","Video transcript retrieval timed out. Retry to try other videos.",503) from None
     except httpx.HTTPError:
-        raise AppError("TRANSCRIPT_UNAVAILABLE","The transcript service could not be reached. Another video will be tried.",503) from None
+        raise AppError("TRANSCRIPT_NETWORK_FAILED","The transcript service could not be reached. Check your connection, then retry within the remaining acquisition allowance.",503) from None
     check_cancel(cancel)
     if response.status_code in {401,403}:
         raise AppError("TRANSCRIPT_ACCESS_REQUIRED","Supadata rejected the API key. Check SUPADATA_API_KEY, restart the server, then retry.",503)
@@ -122,17 +124,25 @@ def fetch_supadata(vid,key,cancel):
 class YouTubeSources:
     def __init__(self,store,settings):
         self.store,self.settings=store,settings
-    def search(self,query):
+    def search_cached(self, query):
+        key = hashlib.sha256(("youtube-search-v2:" + query.lower()).encode()).hexdigest()
+        return bool(self.settings.youtube_key) and self.store.cache_get(key, max_age=SOURCE_TTL) is not None
+    def transcript_cached(self, candidate):
+        key = hashlib.sha256((f"youtube-caption-v2:{PROVIDER}:{candidate['video_id']}:en").encode()).hexdigest()
+        return self.store.cache_get(key, max_age=SOURCE_TTL) is not None
+    def search(self,query,audit=None):
         if not self.settings.youtube_key:
-            return search_youtube(query,"")
+            return search_youtube(query,"",audit)
         key=hashlib.sha256(("youtube-search-v2:"+query.lower()).encode()).hexdigest()
         cached=self.store.cache_get(key,max_age=SOURCE_TTL)
         if cached is not None:
+            if audit:
+                audit("search_cache_hit")
             return cached
-        candidates=search_youtube(query,self.settings.youtube_key)
+        candidates=search_youtube(query,self.settings.youtube_key,audit)
         self.store.cache_put(key,candidates)
         return candidates
-    def transcript(self,candidate,cancel):
+    def transcript(self,candidate,cancel,audit=None):
         check_cancel(cancel)
         vid=candidate["video_id"]
         video_id(f"https://www.youtube.com/watch?v={vid}")
@@ -143,8 +153,10 @@ class YouTubeSources:
             require_youtube(source)
             if source.video_id!=vid:
                 raise AppError("YOUTUBE_SOURCE_REQUIRED","The cached video ID does not match. Retry to retrieve the source.",422)
+            if audit:
+                audit("transcript_cache_hit")
             return source
-        data=fetch_supadata(vid,self.settings.supadata_key,cancel)
+        data=fetch_supadata(vid,self.settings.supadata_key,cancel,audit)
         try:
             source=source_from_transcript(candidate,data)
         except (ValueError,KeyError,TypeError):

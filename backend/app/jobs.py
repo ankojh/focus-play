@@ -5,7 +5,12 @@ import json
 import threading
 import time
 import uuid
-from .contracts import Job, Lesson, LessonPlan, Short, StoryboardDraft, ErrorInfo, ModelStoryboard, SavedLearningRequest, CandidateRanking
+from .contracts import (Job, Lesson, LessonPlan, Short, StoryboardDraft, ErrorInfo, ModelStoryboard,
+                        SavedLearningRequest, CandidateRanking, AcquisitionLedger, AcquisitionRound)
+from .planning import (PLANNING_VERSION, MIN_TARGET_MS, DEFAULT_TARGET_MS, new_state, refresh,
+                       aggregate, candidate_capacity, recalibrate_queued, remaining_for_batch,
+                       needs_expansion, coverage_for, speech_prediction, useful_minimum)
+from .validation import similar
 from .storyboard import STORYBOARD_VERSION, COMPILER_VERSION, compile_storyboard
 from .assets import Assets
 from .visuals import VISUAL_VERSION
@@ -13,7 +18,7 @@ from .errors import AppError, Cancelled
 from .providers import check_cancel
 from .ranking import KEEP, pick, ranking_task, validator
 from .sources import retrieve
-from .validation import validate_draft, verify_support, planned_duration, attach_evidence, diagram_evidence
+from .validation import validate_draft, verify_support, attach_evidence, diagram_evidence
 from .youtube import YouTubeSources, queries, require_youtube
 from .teaching import (TEACHING_VERSION, validate_plan as check_plan, planned_shorts,
                        objective_for, teaching_context, record_coverage, plan_diagnostics)
@@ -87,7 +92,10 @@ class Jobs:
         self.reserve(lid)
         now = time.time()
         lesson = Lesson(id=lid, request=SavedLearningRequest.model_validate(request.model_dump()), sources=[],
-                        job=Job(id=uid("job_"), lesson_id=lid, created_at=now, updated_at=now))
+                        job=Job(id=uid("job_"), lesson_id=lid, created_at=now, updated_at=now),
+                        planning=new_state(request.time_budget_seconds * 1000),
+                        acquisition=AcquisitionLedger(per_round_limit=self.settings.rank_candidates,
+                                                      transcript_limit=2 * self.settings.rank_candidates))
         self.store.save(lesson)
         self.enqueue(lid)
         return lesson
@@ -121,7 +129,7 @@ class Jobs:
             if short.status != "ready" or not (self.settings.data / "audio" / (short.audio_path or "missing")).exists():
                 short.status = "queued"
                 short.error = None
-        self.store.save(lesson)
+        self.store.save(lesson, resume=True)
         self.enqueue(lid)
         return lesson
 
@@ -146,7 +154,7 @@ class Jobs:
         lesson.shorts.insert(index + 1, new)
         lesson.short_ids = [s.id for s in lesson.shorts]
         lesson.extra_allowance_ms += request.added_seconds * 1000
-        lesson.planned_duration_ms = planned_duration(lesson.shorts)
+        refresh(lesson)
         lesson.job.status = "queued"
         lesson.job.stage = "queued"
         lesson.status = "partially_ready"
@@ -217,38 +225,221 @@ class Jobs:
             require_youtube(source)
         return sources
 
-    async def acquire(self,lesson,cancel,tried,round_number,focus=None):
-        await self.stage(lesson,"Searching YouTube")
-        query=queries(lesson.request.goal,lesson.request.prior_knowledge,focus)[round_number]
-        candidates=await asyncio.to_thread(self.youtube.search,query)
-        # Each transcript request costs one provider credit, including videos without captions.
-        limit=self.settings.rank_candidates
-        fetched,attempts=[],0
-        for candidate in candidates:
+    def acquisition_audit(self, lesson, kind):
+        ledger = lesson.acquisition
+        if kind == "search_cache_hit":
+            ledger.search_cache_hits += 1
+            ledger.search_provider_calls -= 1
+        elif kind == "transcript_cache_hit":
+            ledger.transcript_cache_hits += 1
+            ledger.transcript_provider_calls -= 1
+        elif kind == "supadata":
+            ledger.transcript_http_calls += 1
+        else:
+            ledger.youtube_http_calls += 1
+            ledger.youtube_quota_units += 100 if kind == "youtube_search" else 1
+        # Persist at the actual HTTP boundary, including quota/network failures.
+        self.store.save(lesson)
+
+    async def acquire(self, lesson, cancel, focus=None):
+        from functools import partial
+        ledger = lesson.acquisition
+        if not ledger.rounds:
+            # Legacy adapters must not raise a smaller configured source limit.
+            ledger.per_round_limit = min(ledger.per_round_limit, self.settings.rank_candidates)
+            ledger.transcript_limit = min(ledger.transcript_limit, 2 * self.settings.rank_candidates)
+        audit = partial(self.acquisition_audit, lesson)
+        real_provider = isinstance(self.youtube, YouTubeSources)
+        round_ = next((r for r in ledger.rounds if not r.completed), None)
+        if round_ is None:
+            if len(ledger.rounds) >= ledger.round_limit:
+                return 0
+            query = queries(lesson.request.goal, lesson.request.prior_knowledge, focus)[len(ledger.rounds)]
+            round_ = AcquisitionRound(query=query, completed=True)
+            ledger.rounds.append(round_)
+            cached = False if real_provider else getattr(self.youtube, "search_cached", lambda q: False)(query)
+            ledger.search_cache_hits += int(cached)
+            ledger.search_provider_calls += int(not cached)
+            # Reserve spend BEFORE the call. Failed calls also consume a round.
+            await self.stage(lesson, "Searching YouTube")
+            search = partial(self.youtube.search, audit=audit) if real_provider else self.youtube.search
+            round_.candidates = await self.provider_work(lesson, search, query)
+            round_.completed = False
+            self.store.save(lesson)
+        fetched = [(c, self.store.source(sid)) for sid in round_.source_ids
+                   for c in round_.candidates if c["video_id"] == self.store.source(sid).video_id]
+        for candidate in round_.candidates:
             check_cancel(cancel)
-            if candidate["video_id"] in tried:
+            vid = candidate["video_id"]
+            if vid in ledger.tried_video_ids:
                 continue
-            if attempts>=limit or len(tried)>=2*limit:
+            if round_.transcript_attempts >= ledger.per_round_limit or len(ledger.tried_video_ids) >= ledger.transcript_limit:
                 break
-            tried.add(candidate["video_id"])
-            attempts+=1
-            await self.stage(lesson,"Reading video transcripts")
+            ledger.tried_video_ids.append(vid)
+            round_.transcript_attempts += 1
+            cached = False if real_provider else getattr(self.youtube, "transcript_cached", lambda c: False)(candidate)
+            ledger.transcript_cache_hits += int(cached)
+            ledger.transcript_provider_calls += int(not cached)
+            await self.stage(lesson, "Reading video transcripts")
             try:
-                source=await asyncio.to_thread(self.youtube.transcript,candidate,cancel)
+                transcript = partial(self.youtube.transcript, audit=audit) if real_provider else self.youtube.transcript
+                source = await self.provider_work(lesson, transcript, candidate, cancel)
                 require_youtube(source)
             except AppError as exc:
-                if exc.code in {"TRANSCRIPT_UNAVAILABLE","INVALID_YOUTUBE_TRANSCRIPT","TRANSCRIPT_TIMEOUT"}:
+                if exc.code in {"TRANSCRIPT_UNAVAILABLE", "INVALID_YOUTUBE_TRANSCRIPT"}:
                     continue
                 raise
-            check_cancel(cancel)
-            if not any(s.id==source.id for s in lesson.sources):
-                fetched.append((candidate,source))
-        chosen=await self.rank(lesson,fetched,cancel,focus)
-        for source in chosen:
             self.store.put_source(source)
-            lesson.sources.append(source)
+            round_.source_ids.append(source.id)
+            # Keep pending successful transcripts through cancellation/restart.
+            self.store.save(lesson)
+            fetched.append((candidate, source))
+        chosen = await self.rank(lesson, fetched, cancel, focus)
+        check_cancel(cancel)
+        for source in chosen:
+            if not any(s.id == source.id for s in lesson.sources):
+                lesson.sources.append(source)
+        round_.completed = True
         self.store.save(lesson)
         return len(chosen)
+
+    async def provider_work(self, lesson, function, *args):
+        state = lesson.planning
+        if state and state.work_seconds >= state.work_limit_seconds:
+            raise AppError("GENERATION_LIMIT", "This lesson reached its persisted work-time limit. Ready videos are saved.", 422)
+        started = time.monotonic()
+        try:
+            return await asyncio.to_thread(function, *args)
+        finally:
+            if state:
+                state.work_seconds += time.monotonic() - started
+                self.store.save(lesson)
+
+    def generate(self, lesson, contract, task, cancel, validate=None):
+        """Reserve worst-case schema attempts; retries cannot reset local work."""
+        state = lesson.planning if lesson else None
+        if state:
+            if state.model_call_units + 3 > state.model_call_limit or state.work_seconds >= state.work_limit_seconds:
+                raise AppError("GENERATION_LIMIT", "This lesson reached its persisted generation limit. Ready videos are saved; start a new, more focused request.", 422)
+            state.model_call_units += 3
+            self.store.save(lesson)
+        started = time.monotonic()
+        try:
+            return self.model.generate(contract, task, cancel, validate)
+        finally:
+            if state:
+                state.work_seconds += time.monotonic() - started
+                self.store.save(lesson)
+
+    def speech_profile(self, lesson):
+        key = cache_key({"speech_prediction_version": 1, "speech": lesson.provider_settings["speech"]})
+        samples = self.store.cache_get(key) or []
+        return key, samples, speech_prediction(samples)
+
+    async def plan_batch(self, lesson, cancel, *, initial=False):
+        state = lesson.planning
+        budget = lesson.request.time_budget_seconds * 1000 if initial else remaining_for_batch(lesson)
+        previous = [] if initial else [o for o in lesson.objectives if o.curriculum_role != "closing"]
+        count = min(state.batch_limit, state.activity_limit - len(lesson.objectives), budget // useful_minimum(lesson))
+        limited = (state.expansion_attempts >= state.expansion_limit or
+                   state.model_call_units + 15 > state.model_call_limit or state.work_seconds >= state.work_limit_seconds)
+        if count < 1 or limited:
+            state.completion_reason = "generation_limit" if len(lesson.objectives) >= state.activity_limit or limited else "budget_fit"
+            state.completion_detail = "No further useful activity fits within the remaining budget or bounded generation limit."
+            return False
+        state.expansion_attempts += 1
+        self.store.save(lesson)
+        await self.stage(lesson, "planning the lesson" if initial else "expanding the lesson outline")
+        focus = " ".join(g.query_intent for g in state.missing_coverage) or lesson.request.goal
+        # Rotate bounded retrieval toward unused passages; drafts still require exact selected IDs.
+        used = {sid for e in state.coverage for sid in e.evidence_segment_ids}
+        segments, key_base = self.context(lesson, focus, excluded_ids=used if not initial else ())
+        task = {"task": f"Plan a bounded batch of 1 to {count} useful source-supported outcomes for this SAME goal. "
+                "Do not broaden a narrow goal, paraphrase covered claims or use transcript word count as proof of support. "
+                "Use distinct observable outcomes (explain, trace, compare, predict, apply); stable new concept_id values, earlier dependency_ids, "
+                "learner relevance, evidence_segment_ids and visual_intent. Each clip has one teaching purpose. "
+                "Core supplies needed concepts; extensions add supported examples, mechanisms, caveats or applications; closing recaps earlier dependencies. "
+                "For the initial batch include necessary core and a reserved closing recap where useful; a very narrow one-clip goal can close with its own takeaway. "
+                "For later batches add only useful extensions, not another introduction or recap. Do not replace the committed core or closing. "
+                "If the requested goal itself is unsupported, return sufficient_evidence=false and objectives=[]. "
+                "In an extension batch, if no DISTINCT supported content remains, return objectives=[] and explain why. "
+                "covered_outcomes is a compact list of concept_id|outcome strings; never repeat these outcomes. "
+                "If a specific missing facet could help this outcome, return up to two missing_coverage entries with focused query_intent, not a broader topic. "
+                f"Aim for {DEFAULT_TARGET_MS}ms media per clip (15000 to 40000ms); sum targets plus 20000ms for each checkpoint must fit {budget}ms. "
+                "Practice is untimed allowance; use a checkpoint only at a useful boundary that fits. Preserve a useful closing without double counting it. "
+                "Use at most two source-only examples across the lesson; facts are exact excerpts, no invented examples or numbers. "
+                "Existing examples may be referenced; do not re-declare them. Prerequisites=[] when none. "
+                "Keep output compact for the local token bound. Templates: " + TEMPLATE_GUIDE,
+                "plan_version": 3, "max_objectives": count, "max_target_ms": min(40000, budget),
+                "request": key_base["request"], "phase": "core" if initial else "extension",
+                "remaining_ms": budget, "revision": state.revision,
+                "covered_outcomes": [f"{o.concept_id}|{o.learning_outcome[:48]}" for o in previous],
+                "recent_coverage": [{"id": e.concept_id, "claim": e.used_claims[0][:100] if e.used_claims else "",
+                                     "segments": e.evidence_segment_ids[:2], "facets": e.supported_facets}
+                                    for e in state.coverage[-4:]],
+                "examples": [e.model_dump() for e in lesson.examples],
+                "segments": [s.model_dump() for s in segments]}
+        def valid(plan):
+            if not initial:
+                # Identical proposed work is exhaustion, not a reason to publish duplicates.
+                plan.objectives = [o for o in plan.objectives if not any(o.concept_id == p.concept_id or
+                    (o.teaching_role != "recap" and similar(o.learning_outcome or o.title, p.learning_outcome or p.title, .8))
+                    for p in lesson.objectives)]
+                plan.examples = [e for e in plan.examples if e.id not in {old.id for old in lesson.examples}]
+                if any(o.curriculum_role != "extension" for o in plan.objectives):
+                    raise ValueError("Additional batches must be distinct in-goal extensions, not more core or closing.")
+            check_plan(plan, segments, count, budget, calibrated=True, previous=previous,
+                       examples_before=lesson.examples)
+            if len(lesson.examples) + len(plan.examples) > 2:
+                raise ValueError("Use at most two recurring examples across the lesson.")
+        key = cache_key({**key_base, "stage": "session-plan", "task": task})
+        cached = self.store.cache_get(key)
+        plan = LessonPlan.model_validate(cached) if cached else await asyncio.to_thread(self.generate, lesson, LessonPlan, task, cancel, valid)
+        valid(plan)
+        check_cancel(cancel)
+        lesson.metrics["plan_cache_hits"] = lesson.metrics.get("plan_cache_hits", 0) + int(bool(cached))
+        if initial:
+            lesson.metrics["plan_cache_hit"] = int(bool(cached))
+        state.missing_coverage = plan.missing_coverage
+        if not plan.sufficient_evidence or not plan.objectives:
+            # The original two-round allowance is shared with focused acquisition.
+            if plan.missing_coverage or not plan.sufficient_evidence:
+                focus = " ".join(g.query_intent for g in plan.missing_coverage) or lesson.request.goal
+                if await self.acquire(lesson, cancel, focus):
+                    return await self.plan_batch(lesson, cancel, initial=initial)
+                state.completion_reason = "source_limit"
+            else:
+                state.completion_reason = "coverage_exhausted"
+            state.completion_detail = plan.reason or "The available sources do not support more distinct useful outcomes for this goal."
+            if initial:
+                raise AppError("INSUFFICIENT_EVIDENCE", "Available YouTube transcripts cannot support this goal within the search limit. " + state.completion_detail, 422)
+            self.store.save(lesson)
+            return False
+        if not cached:
+            self.store.cache_put(key, plan.model_dump())
+        insert = next((i for i, s in enumerate(lesson.shorts) if s.curriculum_role == "closing" and s.status != "ready"), len(lesson.shorts))
+        if not initial:
+            for closing in lesson.shorts:
+                if closing.curriculum_role == "closing" and closing.status != "ready" and not closing.optional:
+                    closing.target_duration_ms = useful_minimum(lesson)
+        objective_insert = next((i for i, o in enumerate(lesson.objectives) if o.curriculum_role == "closing"), len(lesson.objectives))
+        lesson.objectives[objective_insert:objective_insert] = plan.objectives
+        lesson.examples.extend(plan.examples)
+        lesson.shorts[insert:insert] = planned_shorts(plan, lambda: uid("short_"))
+        _, _, (_, uncertainty) = self.speech_profile(lesson)
+        for short in lesson.shorts[insert:insert + len(plan.objectives)]:
+            short.duration_uncertainty_ms = uncertainty
+        state.coverage.extend(coverage_for(o) for o in plan.objectives)
+        state.revision += 1
+        lesson.short_ids = [s.id for s in lesson.shorts]
+        lesson.teaching_plan_version = 2
+        if initial:
+            lesson.plan_diagnostics = ([plan.reason] if plan.reason else []) + plan_diagnostics(plan)
+        refresh(lesson)
+        if initial:
+            lesson.original_planned_duration_ms = lesson.planned_duration_ms
+        self.store.save(lesson)
+        return True
 
     async def rank(self,lesson,fetched,cancel,focus=None):
         if len(fetched)<=1:
@@ -258,8 +449,10 @@ class Jobs:
         key=cache_key({"stage":"rank","model":self.settings.model,"task":task})
         cached=self.store.cache_get(key)
         try:
-            ranking=CandidateRanking.model_validate(cached) if cached else await asyncio.to_thread(self.model.generate,CandidateRanking,task,cancel,validator(fetched))
-        except AppError:
+            ranking=CandidateRanking.model_validate(cached) if cached else await asyncio.to_thread(self.generate,lesson,CandidateRanking,task,cancel,validator(fetched))
+        except AppError as exc:
+            if exc.code == "GENERATION_LIMIT":
+                raise
             # Ranking only improves the choice. Keep YouTube's order when the model cannot rank.
             return [s for _,s in fetched][:KEEP]
         check_cancel(cancel)
@@ -272,7 +465,10 @@ class Jobs:
         # A rejected short is rewritten once with the reviewer's reason before the lesson fails.
         for attempt in range(2):
             try:
-                review = await asyncio.to_thread(verify_support, self.model, draft, segments, cancel, task.get("teaching"))
+                from types import SimpleNamespace
+                from functools import partial
+                reviewer = SimpleNamespace(generate=partial(self.generate, lesson)) if lesson else self.model
+                review = await asyncio.to_thread(verify_support, reviewer, draft, segments, cancel, task.get("teaching"))
                 check_cancel(cancel)
                 if short is not None:
                     short.source_review_status = "model_supported"
@@ -291,19 +487,19 @@ class Jobs:
                     raise AppError("TEACHING_QUALITY_FAILED" if teaching_failure else "UNSUPPORTED_CLAIM",
                                    "The bounded teaching review rejected this short. Retry or use a more focused learning goal." if teaching_failure else "The model source review could not support this short. Retry or use a more focused learning goal.", 422) from exc
                 retry={**task,"task":task["task"]+" A reviewer rejected the previous version: "+str(exc)[:400]+" Fix that problem."}
-                draft = attach_evidence(await asyncio.to_thread(self.model.generate, ModelStoryboard, retry, cancel, valid), segments)
+                draft = attach_evidence(await asyncio.to_thread(self.generate, lesson, ModelStoryboard, retry, cancel, valid), segments)
         return draft
 
     def cache_draft(self, key, draft, short):
         self.store.cache_put(key, {"draft": draft.model_dump(), "source_review_reason": short.source_review_reason,
                                    "teaching_diagnostics": short.teaching_diagnostics, "review_repair_reasons": short.review_repair_reasons})
 
-    def context(self,lesson,focus=None,required_ids=()):
+    def context(self,lesson,focus=None,required_ids=(),excluded_ids=()):
         sources=self.youtube_sources(lesson)
-        segments=retrieve(sources,focus or lesson.request.goal,required_ids=required_ids)
+        segments=retrieve(sources,focus or lesson.request.goal,required_ids=required_ids,excluded_ids=excluded_ids)
         key_base={"source_policy":"youtube-v1","sources":[{"id":s.id,"hash":s.content_hash} for s in sources],
             "settings":lesson.provider_settings,"storyboard_version":STORYBOARD_VERSION,"timeline_compiler_version":COMPILER_VERSION,
-            "teaching_version":TEACHING_VERSION,
+            "teaching_version":TEACHING_VERSION,"planning_version":PLANNING_VERSION if lesson.planning else "legacy",
             "request":lesson.request.model_dump(exclude={"request_id","source_mode","source_ids"})}
         return segments,key_base
 
@@ -311,22 +507,27 @@ class Jobs:
         started = time.monotonic()
         lesson = self.store.lesson(lid)
         cancel = self.cancel_flags[lid]
+        check_cancel(cancel)
+        if lesson.shorts and all(s.status == "ready" for s in lesson.shorts):
+            closing_ready = any(s.curriculum_role == "closing" and not s.optional for s in lesson.shorts)
+            if not needs_expansion(lesson) or closing_ready:
+                # Finalise validated media without requiring providers to remain
+                # online for an otherwise unnecessary completion checkpoint.
+                self.complete(lesson)
+                return False
         source_start=time.monotonic()
-        tried={s.video_id for s in self.youtube_sources(lesson)}
-        rounds=0
-        if not tried:
-            while rounds<2:
-                added=await self.acquire(lesson,cancel,tried,rounds)
-                rounds+=1
+        if not self.youtube_sources(lesson):
+            while any(not r.completed for r in lesson.acquisition.rounds) or len(lesson.acquisition.rounds) < lesson.acquisition.round_limit:
+                added=await self.acquire(lesson,cancel)
                 if added:
                     break
             if not self.youtube_sources(lesson):
-                raise AppError("NO_USABLE_TRANSCRIPTS","No accessible English YouTube transcripts were found within the search limit. Retry or use a more focused goal.",422)
+                raise AppError("NO_USABLE_TRANSCRIPTS","No accessible English YouTube transcripts were found within this lesson's search limit. Check source access, then start a new, more focused request; retry does not reset the acquisition allowance.",422)
         lesson.metrics["source_acquisition_seconds"]=lesson.metrics.get("source_acquisition_seconds",0)+time.monotonic()-source_start
         started=time.monotonic()
         await self.stage(lesson, "checking local providers")
-        fingerprint = await asyncio.to_thread(self.model.fingerprint)
-        await asyncio.to_thread(self.speech.prepare)
+        fingerprint = await self.provider_work(lesson, self.model.fingerprint)
+        await self.provider_work(lesson, self.speech.prepare)
         check_cancel(cancel)
         lesson.provider_settings = {**fingerprint, "speech": self.speech.fingerprint(), "language": lesson.request.language}
         if "provider_load_seconds" not in lesson.metrics:
@@ -336,60 +537,49 @@ class Jobs:
             lesson.status = "preparing"
             await self.stage(lesson, "planning the lesson")
             planning_started = time.monotonic()
-            max_shorts = min(8, (lesson.request.time_budget_seconds * 1000) // 40000)
-            def validate_plan(plan):
-                check_plan(plan, segments, max_shorts, lesson.request.time_budget_seconds * 1000)
-            while True:
-                plan_key=cache_key({**key_base,"stage":"plan"})
-                cached=self.store.cache_get(plan_key)
-                plan=LessonPlan.model_validate(cached) if cached else await asyncio.to_thread(self.model.generate,LessonPlan,
-                    {"task":f"Plan a coherent source-grounded lesson with 1 to {max_shorts} ordered outcomes, not a list of summaries. "
-                        "Start with the learner's goal and prior knowledge: skip basics they know, but preserve needed dependencies. "
-                        "Use stable concept_id values; dependency_ids can name only earlier concepts. Express an observable learning_outcome (explain, predict, choose, trace, apply). "
-                        "Give each short one outcome, its relevance to this learner and supplied evidence_segment_ids. "
-                        "Progress where useful from understanding a mechanism to a worked example, distinction/misconception, application and recall. "
-                        "Do not force every role or expand a narrow goal. Longer lessons should add useful depth, not introductions in new words. "
-                        "Classify core/extension/closing separately from teaching_role. A recap is closing, depends on earlier concepts and does not add new coverage. "
-                        "Place checkpoint=true at a coherent application, difficult distinction or closing boundary, not every third short. "
-                        f"Reserve 40000ms per clip plus 20000ms per checkpoint within {lesson.request.time_budget_seconds * 1000}ms. target_duration_ms=40000 until calibrated duration planning is available. "
-                        "Use up to two recurring example records only when sources contain them: stable entities, exact excerpt facts, evidence_segment_ids. "
-                        "No synthetic substitutions or invented values, even labelled illustrative. Omit unsupported examples. "
-                        "Describe visual_intent before choosing a renderer template: "+TEMPLATE_GUIDE+" "
-                        "Keep strings concise to fit the local output limit. Prerequisites are short knowledge concepts; [] if none. "
-                        "Set sufficient_evidence=false with a reason if the actual requested goal is unsupported, and return objectives=[] and examples=[]. "
-                        "Do not imply a short partial lesson fully covers the goal; record limitations in reason.",
-                     "plan_version":2,"max_objectives":max_shorts,"request":key_base["request"],"segments":[s.model_dump() for s in segments]},cancel,validate_plan)
-                validate_plan(plan)
-                check_cancel(cancel)
-                if plan.sufficient_evidence:
-                    break
-                if rounds>=2:
-                    raise AppError("INSUFFICIENT_EVIDENCE","Available YouTube transcripts cannot support this goal. Retry or use a more focused goal. "+plan.reason,422)
-                added=await self.acquire(lesson,cancel,tried,rounds)
-                rounds+=1
-                if not added:
-                    raise AppError("INSUFFICIENT_EVIDENCE","Available YouTube transcripts cannot support this goal within the search limit. Retry or use a more focused goal.",422)
-                segments,key_base=self.context(lesson)
-                await self.stage(lesson,"planning the lesson")
-            if not cached:
-                self.store.cache_put(plan_key,plan.model_dump())
-            lesson.objectives = plan.objectives
-            lesson.teaching_plan_version = 2
-            lesson.examples = plan.examples
-            lesson.plan_diagnostics = ([plan.reason] if plan.reason else []) + plan_diagnostics(plan)
-            lesson.shorts = planned_shorts(plan, lambda: uid("short_"))
-            lesson.short_ids = [s.id for s in lesson.shorts]
-            lesson.planned_duration_ms = planned_duration(lesson.shorts)
-            if lesson.planned_duration_ms > lesson.request.time_budget_seconds * 1000:
-                raise AppError("BUDGET_EXCEEDED", "The plan exceeds the time budget. Use fewer objectives.", 422)
-            lesson.original_planned_duration_ms = lesson.planned_duration_ms
+            # Legacy empty interrupted jobs can resume, but old ready media is never migrated.
+            if lesson.planning is None:
+                lesson.planning = new_state(lesson.request.time_budget_seconds * 1000)
+            if lesson.planning.completion_reason:
+                # Failed initial planning may use the remaining persisted allowance.
+                lesson.planning.completion_reason = None
+            if not await self.plan_batch(lesson, cancel, initial=True):
+                raise AppError("GENERATION_LIMIT", "Initial planning reached its persisted operational limit. Start a new, more focused request.", 422)
             lesson.metrics["planning_seconds"] = time.monotonic() - planning_started
-            lesson.metrics["plan_cache_hit"] = int(bool(cached))
             self.store.save(lesson)
         short = next((s for s in lesson.shorts if s.status != "ready"), None)
+        if (short is None or (short.curriculum_role == "closing" and not short.optional)) and needs_expansion(lesson):
+            # Append before unpublished closing only; never move a ready/selected activity.
+            if not any(s.curriculum_role == "closing" and s.status == "ready" and not s.optional for s in lesson.shorts):
+                await self.plan_batch(lesson, cancel)
+                short = next((s for s in lesson.shorts if s.status != "ready"), None)
         if short is None:
             self.complete(lesson)
             return False
+        if short.audio_path and short.narration_units and short.measured_duration_ms:
+            # Missing-media recovery reuses the exact published script/key, not
+            # a newly calibrated draft. Refuse incompatible voice or timing.
+            if short.provider_settings.get("speech", lesson.provider_settings["speech"]) != lesson.provider_settings["speech"]:
+                raise AppError("MEDIA_REPAIR_SETTINGS", "Restore this short's original speech settings before repairing its missing audio.", 422)
+            units = [u.model_copy(deep=True) for u in short.narration_units]
+            audio, measured, _ = await self.provider_work(lesson, self.speech.synthesize, units, short.audio_path.removesuffix(".wav"), cancel)
+            check_cancel(cancel)
+            if measured != short.measured_duration_ms or [(u.start_ms, u.end_ms) for u in units] != [(u.start_ms, u.end_ms) for u in short.narration_units]:
+                raise AppError("MEDIA_REPAIR_TIMING", "The repaired voice no longer matches the published timeline. Restore the original speech provider/settings; ready content is unchanged.", 422)
+            short.audio_path = audio
+            short.status = "ready"
+            Short.model_validate(short.model_dump())
+            refresh(lesson)
+            self.store.save(lesson)
+            return True
+        if lesson.planning:
+            state = lesson.planning
+            if state.candidate_attempts >= state.candidate_limit:
+                raise AppError("GENERATION_LIMIT", "The persisted candidate limit was reached. Ready videos are saved; use a more focused request.", 422)
+            state.candidate_attempts += 1
+            if short.curriculum_role == "closing" and not short.optional:
+                short.target_duration_ms = max(useful_minimum(lesson), min(40000, candidate_capacity(lesson, short)))
+            self.store.save(lesson)
         index = lesson.shorts.index(short)
         objective = objective_for(lesson, short)
         example = next((e for e in lesson.examples if e.id == short.example_id), None)
@@ -399,14 +589,13 @@ class Jobs:
         segments,key_base=self.context(lesson,focus,required_ids)
         if short.optional:
             while True:
-                support=await asyncio.to_thread(self.model.generate,LessonPlan,
+                support=await asyncio.to_thread(self.generate,lesson,LessonPlan,
                     {"task":"Check whether the supplied YouTube transcript passages support this additional learning point. Return sufficient_evidence=false if not. Return objectives=[]. Do not use outside knowledge.","goal":lesson.request.goal,"objective":short.objective,"segments":[s.model_dump() for s in segments]},cancel)
                 check_cancel(cancel)
                 if support.sufficient_evidence:
                     break
-                if rounds>=2 or not await self.acquire(lesson,cancel,tried,rounds,focus):
+                if not await self.acquire(lesson,cancel,focus):
                     raise AppError("INSUFFICIENT_EVIDENCE","Available YouTube transcripts cannot support this additional short. Retry or start a more focused lesson.",422)
-                rounds+=1
                 segments,key_base=self.context(lesson,focus)
         template = "example" if short.optional and short.objective.startswith("Show") else objective.template if objective else "process"
         history = teaching_context(lesson, short)
@@ -417,7 +606,13 @@ class Jobs:
                     "plan": objective.model_dump() if objective and not short.optional else None,
                     "example": example.model_dump() if example else None, "history": history}
         asset_candidates = self.assets.candidates()
-        short_key = cache_key({**key_base, "visual_version": VISUAL_VERSION, "asset_candidates": [a["id"] for a in asset_candidates], "teaching": teaching, "template": template, "question": short.question_required,
+        capacity = candidate_capacity(lesson, short) if lesson.planning else 40000
+        target_ms = min(short.target_duration_ms, capacity)
+        if target_ms < MIN_TARGET_MS and lesson.planning:
+            raise AppError("BUDGET_FIT_FAILED", "The remaining budget cannot support this unpublished activity. Ready content is unchanged.", 422)
+        profile_key, samples, (ms_per_word, uncertainty) = self.speech_profile(lesson)
+        target_words = max(30, min(90, round((target_ms - min(2000, uncertainty)) / ms_per_word)))
+        short_key = cache_key({**key_base, "target_duration_ms": target_ms, "target_words": target_words, "visual_version": VISUAL_VERSION, "asset_candidates": [a["id"] for a in asset_candidates], "teaching": teaching, "template": template, "question": short.question_required,
                                "earlier_questions": earlier_questions, "segments": [s.id for s in segments], "stage": "draft"})
         cached = self.store.cache_get(short_key)
         await self.stage(lesson, "preparing the first short" if index == 0 else f"preparing short {index + 1}", short, "generating")
@@ -453,16 +648,18 @@ class Jobs:
                     "Code is display-only and must be copied exactly from its cited segment, never invented or executed. Chart values and units must match each point's cited passage. "
                     "Images select only candidate asset_id and actual dimensions. Asset rights do not prove a claim; captions/annotations need source support. Use a simpler supported format if no suitable asset exists. "
                     f"Suggested visual intent {template}: {TEMPLATES[template]} The diagram chart template is legacy-only. Do not author timestamps or renderer code.",
+                "target_duration_ms": target_ms, "max_duration_ms": capacity, "target_words": target_words,
                 "objective": short.objective, "template": template, "question_required": short.question_required,
                 "learner": lesson.request.prior_knowledge, "teaching": teaching, "earlier_questions": earlier_questions,
                 "asset_candidates": asset_candidates, "visual_version": VISUAL_VERSION,
                 "segments": [s.model_dump() for s in segments]}
+        task["task"] += f" Draft near {target_words} spoken words for about {target_ms}ms. Measured media must fit {capacity}ms without slowing speech or padding."
         if cached:
             short.source_review_status = "model_supported"
             short.source_review_reason = cached["source_review_reason"]
             short.teaching_diagnostics = cached["teaching_diagnostics"]
             short.review_repair_reasons = cached["review_repair_reasons"]
-        draft = StoryboardDraft.model_validate(cached["draft"]) if cached else attach_evidence(await asyncio.to_thread(self.model.generate, ModelStoryboard, task, cancel, valid), segments)
+        draft = StoryboardDraft.model_validate(cached["draft"]) if cached else attach_evidence(await asyncio.to_thread(self.generate, lesson, ModelStoryboard, task, cancel, valid), segments)
         valid(draft)
         short.timings["generation_seconds"] = time.monotonic() - model_start
         await self.stage(lesson, "validating source references", short, "validating")
@@ -474,17 +671,45 @@ class Jobs:
         await self.stage(lesson, "generating local speech", short, "synthesizing")
         speech_start = time.monotonic()
         # Duration repair is separate from the two schema repairs; voice speed remains fixed.
+        repair_words = max(30, min(50, int(target_words * .7)))
         for duration_attempt in range(2):
             speech_key = cache_key({"texts": [u.text for u in draft.narration_units], "settings": lesson.provider_settings, "sources": key_base["sources"], "language": lesson.request.language,
                                     "storyboard_version": STORYBOARD_VERSION, "timeline_compiler_version": COMPILER_VERSION})
             try:
-                audio, duration, audio_cached = await asyncio.to_thread(self.speech.synthesize, draft.narration_units, speech_key, cancel)
+                audio, duration, audio_cached = await self.provider_work(lesson, self.speech.synthesize, draft.narration_units, speech_key, cancel)
+                if duration > capacity:
+                    words = len(" ".join(u.text for u in draft.narration_units).split())
+                    repair_words = max(30, int(words * capacity / duration * .9))
+                    raise AppError("SPEECH_DURATION", f"Measured speech must fit the remaining {capacity}ms. Shorten to about {repair_words} words.", 422)
                 break
             except AppError as exc:
-                if exc.code != "SPEECH_DURATION" or duration_attempt:
+                if exc.code != "SPEECH_DURATION":
                     raise
-                task["task"] += " The speech exceeded 40 seconds. Shorten to 40 to 50 words."
-                draft = attach_evidence(await asyncio.to_thread(self.model.generate, ModelStoryboard, task, cancel, valid), segments)
+                if duration_attempt:
+                    if lesson.planning and not short.optional and short.curriculum_role in {"extension", "closing"}:
+                        # A good but unfit candidate stays unpublished. Defer its
+                        # dependent queued work too, rather than dropping prerequisites.
+                        deferred = {short.concept_id}
+                        while True:
+                            dependents = {o.concept_id for o in lesson.objectives if set(o.dependency_ids) & deferred}
+                            if dependents <= deferred:
+                                break
+                            deferred |= dependents
+                        removed = [s for s in lesson.shorts if s.status != "ready" and s.concept_id in deferred]
+                        lesson.shorts = [s for s in lesson.shorts if s not in removed]
+                        lesson.short_ids = [s.id for s in lesson.shorts]
+                        lesson.planning.deferred_concept_ids.extend(s.concept_id for s in removed)
+                        lesson.planning.completion_reason = "budget_fit"
+                        lesson.planning.completion_detail = "Additional supported content could not fit the remaining authorised time after a bounded speech repair. Ready videos were not changed or padded."
+                        lesson.planning.revision += 1
+                        refresh(lesson)
+                        check_cancel(cancel)
+                        self.store.save(lesson)
+                        return True
+                    raise
+                task["target_words"] = repair_words
+                task["task"] += " " + exc.message + f" Shorten to about {repair_words} words. Repair only this unpublished activity, not any ready content."
+                draft = attach_evidence(await asyncio.to_thread(self.generate, lesson, ModelStoryboard, task, cancel, valid), segments)
                 draft = await self.reviewed(draft, task, segments, valid, cancel, short, lesson)
                 self.cache_draft(short_key, draft, short)
         else:
@@ -512,12 +737,18 @@ class Jobs:
         short.storyboard_version = STORYBOARD_VERSION
         short.timeline_compiler_version = COMPILER_VERSION
         short.status = "ready"
+        # Capacity was checked before publication; only queued predictions may shrink.
+        if lesson.planning:
+            try:
+                recalibrate_queued(lesson)
+            except ValueError as exc:
+                raise AppError("BUDGET_EXCEEDED", str(exc), 422) from exc
         # Validate the final playback object before the atomic store publication.
         Short.model_validate(short.model_dump())
         short.error = None
         short.cache_hit = bool(cached and audio_cached)
         short.provider_settings = dict(lesson.provider_settings)
-        lesson.planned_duration_ms = planned_duration(lesson.shorts)
+        refresh(lesson)
         if lesson.planned_duration_ms > lesson.request.time_budget_seconds * 1000 + lesson.extra_allowance_ms:
             raise AppError("BUDGET_EXCEEDED", "The measured lesson exceeds the approved time budget.", 422)
         elapsed = time.time() - lesson.job.created_at
@@ -528,17 +759,43 @@ class Jobs:
             preceding = sum(s.measured_duration_ms + (20000 if s.question else 0) for s in lesson.shorts[:index]) / 1000
             lesson.metrics[f"waiting_before_short_{index + 1}_seconds"] = max(0, elapsed - lesson.metrics.get("first_playable_seconds", elapsed) - preceding)
         record_coverage(lesson, short)
+        if lesson.planning:
+            entry = next((e for e in lesson.planning.coverage if e.concept_id == short.concept_id), None)
+            if entry:
+                published = next(e for e in lesson.coverage_history if e.short_id == short.id)
+                entry.used_claims = [published.claim_summary]
+                entry.evidence_segment_ids = list(dict.fromkeys(entry.evidence_segment_ids + published.evidence_segment_ids))[:20]
+            lesson.planning.revision += 1
+        words = len(" ".join(u.text for u in short.narration_units).split())
+        samples = [s for s in samples if s["short_id"] != short.id] + [{"short_id": short.id, "duration_ms": duration, "words": words}]
+        self.store.cache_put(profile_key, samples[-16:])
+        if lesson.planning:
+            calibrated_rate, _ = speech_prediction(samples[-16:])
+            lesson.planning.minimum_media_ms = max(MIN_TARGET_MS, min(40000, 30 * calibrated_rate + 1000))
         lesson.status = "partially_ready"
         lesson.job.stage_timings = {name: sum(s.timings.get(name, 0) for s in lesson.shorts)
                                    for name in ("generation_seconds", "validation_seconds", "speech_seconds", "storyboard_compile_seconds")}
         check_cancel(cancel)
         self.store.save(lesson)
-        if all(s.status == "ready" for s in lesson.shorts):
-            self.complete(lesson)
-            return False
+        # Re-enter at the measured checkpoint rather than prematurely completing
+        # the original fixed outline. The next advance may select a stable batch.
         return True
 
     def complete(self, lesson):
+        ledger = refresh(lesson, final=True)
+        if any(s.status != "ready" for s in lesson.shorts):
+            raise AppError("LESSON_NOT_READY", "Unpublished work must finish before completion.", 422)
+        if (ledger.forecast_total_ms > lesson.request.time_budget_seconds * 1000 + lesson.extra_allowance_ms or
+            (lesson.planning and (ledger.original_content_ms > lesson.request.time_budget_seconds * 1000 or
+                                 ledger.extra_content_ms > lesson.extra_allowance_ms))):
+            raise AppError("BUDGET_EXCEEDED", "Final content exceeds the approved time budget or uses the wrong allowance pool.", 422)
+        if lesson.planning:
+            if ledger.shortfall_ms == 0:
+                lesson.planning.completion_reason = "target_met"
+                lesson.planning.completion_detail = "The requested videos-and-practice target was met."
+            elif not lesson.planning.completion_reason:
+                lesson.planning.completion_reason = "budget_fit"
+                lesson.planning.completion_detail = "The useful closing finished below the target; published media was not padded."
         lesson.status = "ready"
         lesson.job.status = "complete"
         lesson.job.stage = "ready"

@@ -213,6 +213,96 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AcquisitionLedger */
+        AcquisitionLedger: {
+            /**
+             * Round Limit
+             * @default 2
+             */
+            round_limit: number;
+            /**
+             * Transcript Limit
+             * @default 16
+             */
+            transcript_limit: number;
+            /**
+             * Per Round Limit
+             * @default 8
+             */
+            per_round_limit: number;
+            /**
+             * Rounds
+             * @default []
+             */
+            rounds: components["schemas"]["AcquisitionRound"][];
+            /**
+             * Tried Video Ids
+             * @default []
+             */
+            tried_video_ids: string[];
+            /**
+             * Search Provider Calls
+             * @default 0
+             */
+            search_provider_calls: number;
+            /**
+             * Transcript Provider Calls
+             * @default 0
+             */
+            transcript_provider_calls: number;
+            /**
+             * Youtube Http Calls
+             * @default 0
+             */
+            youtube_http_calls: number;
+            /**
+             * Youtube Quota Units
+             * @default 0
+             */
+            youtube_quota_units: number;
+            /**
+             * Transcript Http Calls
+             * @default 0
+             */
+            transcript_http_calls: number;
+            /**
+             * Search Cache Hits
+             * @default 0
+             */
+            search_cache_hits: number;
+            /**
+             * Transcript Cache Hits
+             * @default 0
+             */
+            transcript_cache_hits: number;
+        };
+        /** AcquisitionRound */
+        AcquisitionRound: {
+            /** Query */
+            query: string;
+            /**
+             * Completed
+             * @default false
+             */
+            completed: boolean;
+            /**
+             * Candidates
+             * @default []
+             */
+            candidates: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Source Ids
+             * @default []
+             */
+            source_ids: string[];
+            /**
+             * Transcript Attempts
+             * @default 0
+             */
+            transcript_attempts: number;
+        };
         /** Annotation */
         Annotation: {
             /** Id */
@@ -454,6 +544,15 @@ export interface components {
              */
             adds_coverage: boolean;
         };
+        /** CoverageGap */
+        CoverageGap: {
+            /** Outcome */
+            outcome: string;
+            /** Missing Facets */
+            missing_facets: ("definition" | "mechanism" | "example" | "caveat" | "application")[];
+            /** Query Intent */
+            query_intent: string;
+        };
         /** DiagramNode */
         DiagramNode: {
             /** Id */
@@ -500,6 +599,62 @@ export interface components {
              * @enum {string}
              */
             role: "neutral" | "start" | "step" | "result" | "warning" | "good" | "bad";
+        };
+        /** DurationLedger */
+        DurationLedger: {
+            /**
+             * Version
+             * @default 2
+             * @constant
+             */
+            version: 2;
+            /**
+             * Measured Ready Media Ms
+             * @default 0
+             */
+            measured_ready_media_ms: number;
+            /**
+             * Reserved Practice Ms
+             * @default 0
+             */
+            reserved_practice_ms: number;
+            /**
+             * Estimated Unready Media Ms
+             * @default 0
+             */
+            estimated_unready_media_ms: number;
+            /**
+             * Reserved Closing Ms
+             * @default 0
+             */
+            reserved_closing_ms: number;
+            /**
+             * Forecast Total Ms
+             * @default 0
+             */
+            forecast_total_ms: number;
+            /** Final Content Ms */
+            final_content_ms?: number | null;
+            /**
+             * Original Content Ms
+             * @default 0
+             */
+            original_content_ms: number;
+            /**
+             * Extra Content Ms
+             * @default 0
+             */
+            extra_content_ms: number;
+            /**
+             * Utilisation
+             * @default 0
+             */
+            utilisation: number;
+            /**
+             * Shortfall Ms
+             * @default 0
+             */
+            shortfall_ms: number;
         };
         /** ErrorInfo */
         ErrorInfo: {
@@ -670,6 +825,9 @@ export interface components {
         };
         /** Lesson */
         Lesson: {
+            planning?: components["schemas"]["PlanningState"] | null;
+            acquisition?: components["schemas"]["AcquisitionLedger"];
+            duration_ledger?: components["schemas"]["DurationLedger"] | null;
             /**
              * Teaching Plan Version
              * @default 1
@@ -834,6 +992,111 @@ export interface components {
             template: "process" | "comparison" | "example" | "timeline" | "chart" | "steps" | "cycle" | "dos_donts" | "key_fact";
             /** Prerequisites */
             prerequisites: string[];
+        };
+        /** OutcomeCoverage */
+        OutcomeCoverage: {
+            /** Concept Id */
+            concept_id: string;
+            /** Outcome */
+            outcome: string;
+            /** Evidence Segment Ids */
+            evidence_segment_ids: string[];
+            /**
+             * Supported Facets
+             * @default []
+             */
+            supported_facets: string[];
+            /**
+             * Used Claims
+             * @default []
+             */
+            used_claims: string[];
+        };
+        /** PlanningState */
+        PlanningState: {
+            /**
+             * Version
+             * @default 2
+             * @constant
+             */
+            version: 2;
+            /**
+             * Revision
+             * @default 0
+             */
+            revision: number;
+            /**
+             * Minimum Media Ms
+             * @default 15000
+             */
+            minimum_media_ms: number;
+            /** Activity Limit */
+            activity_limit: number;
+            /**
+             * Batch Limit
+             * @default 4
+             * @constant
+             */
+            batch_limit: 4;
+            /** Expansion Limit */
+            expansion_limit: number;
+            /**
+             * Expansion Attempts
+             * @default 0
+             */
+            expansion_attempts: number;
+            /**
+             * Candidate Attempts
+             * @default 0
+             */
+            candidate_attempts: number;
+            /**
+             * Candidate Limit
+             * @default 0
+             */
+            candidate_limit: number;
+            /**
+             * Model Call Units
+             * @default 0
+             */
+            model_call_units: number;
+            /**
+             * Model Call Limit
+             * @default 0
+             */
+            model_call_limit: number;
+            /**
+             * Work Seconds
+             * @default 0
+             */
+            work_seconds: number;
+            /**
+             * Work Limit Seconds
+             * @default 7200
+             */
+            work_limit_seconds: number;
+            /** Completion Reason */
+            completion_reason?: ("target_met" | "coverage_exhausted" | "source_limit" | "generation_limit" | "budget_fit") | null;
+            /**
+             * Completion Detail
+             * @default
+             */
+            completion_detail: string;
+            /**
+             * Coverage
+             * @default []
+             */
+            coverage: components["schemas"]["OutcomeCoverage"][];
+            /**
+             * Missing Coverage
+             * @default []
+             */
+            missing_coverage: components["schemas"]["CoverageGap"][];
+            /**
+             * Deferred Concept Ids
+             * @default []
+             */
+            deferred_concept_ids: string[];
         };
         /** ProviderHealth */
         ProviderHealth: {
@@ -1012,6 +1275,16 @@ export interface components {
         };
         /** Short */
         Short: {
+            /**
+             * Target Duration Ms
+             * @default 40000
+             */
+            target_duration_ms: number;
+            /**
+             * Duration Uncertainty Ms
+             * @default 0
+             */
+            duration_uncertainty_ms: number;
             /** Concept Id */
             concept_id?: string | null;
             /** Learning Outcome */

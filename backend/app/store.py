@@ -46,10 +46,24 @@ class Store:
             raise AppError("SOURCE_NOT_FOUND", "The source is missing. Import it again.", 404)
         return Source.model_validate_json(row[0])
 
-    def save(self, lesson: Lesson):
+    def save(self, lesson: Lesson, *, resume=False):
         with self.lock, self.db:
+            row = self.db.execute("SELECT body FROM lessons WHERE id=?", (lesson.id,)).fetchone()
+            current = Lesson.model_validate_json(row[0]) if row else None
+            if current and current.job.status == "cancelled" and not resume and lesson.job.status != "cancelled":
+                # Cancellation can race a provider result. Keep spend/reservations,
+                # but do not publish new media or overwrite the user's decision.
+                ready_ids = {s.id for s in current.shorts if s.status == "ready"}
+                lesson.status = "cancelled"
+                lesson.job.status = "cancelled"
+                lesson.job.stage = "cancelled"
+                for short in lesson.shorts:
+                    if short.id not in ready_ids:
+                        short.status = "cancelled"
+                from .planning import refresh
+                refresh(lesson)
             lesson.job.updated_at = time.time()
-            lesson.job.event_sequence += 1
+            lesson.job.event_sequence = max(lesson.job.event_sequence, current.job.event_sequence if current else 0) + 1
             body = lesson.model_dump_json()
             self.db.execute("INSERT INTO lessons VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body", (lesson.id, lesson.request.request_id, body))
             self.db.execute("INSERT INTO events VALUES (?,?,?)", (lesson.id, lesson.job.event_sequence, json.dumps({"sequence": lesson.job.event_sequence, "stage": lesson.job.stage, "status": lesson.status})))

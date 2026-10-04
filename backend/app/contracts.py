@@ -187,6 +187,8 @@ def legacy_scene_kinds(value):
 
 ShortState = Literal["queued", "generating", "validating", "synthesizing", "ready", "failed", "cancelled"]
 class Short(Contract):
+    target_duration_ms: int = Field(default=40000, ge=1000, le=40000)
+    duration_uncertainty_ms: int = Field(default=0, ge=0, le=40000)
     concept_id: str | None = None
     learning_outcome: str | None = None
     teaching_role: TeachingRole | None = None
@@ -287,10 +289,16 @@ class Objective(Contract):
     template: Template
     prerequisites: list[Annotated[str, Field(min_length=1, max_length=80)]] = Field(max_length=4)
 
+class CoverageGap(Contract):
+    outcome: str = Field(min_length=5, max_length=180)
+    missing_facets: list[Literal["definition", "mechanism", "example", "caveat", "application"]] = Field(max_length=5)
+    query_intent: str = Field(min_length=5, max_length=180)
+
 class LessonPlan(Contract):
     sufficient_evidence: bool
     reason: str = Field(max_length=400)
-    objectives: list[Objective] = Field(max_length=8)
+    missing_coverage: list[CoverageGap] = Field(default=[], max_length=2)
+    objectives: list[Objective] = Field(max_length=80)
     examples: list[ExampleRecord] = Field(default=[], max_length=2)
 
 class CoverageEntry(Contract):
@@ -327,10 +335,78 @@ class Job(Contract):
     created_at: float
     updated_at: float
 
+class AcquisitionRound(Contract):
+    query: str
+    completed: bool = False
+    candidates: list[dict] = Field(default=[], max_length=15)
+    source_ids: list[str] = Field(default=[], max_length=15)
+    transcript_attempts: int = 0
+
+class AcquisitionLedger(Contract):
+    round_limit: int = Field(default=2, ge=1, le=2)
+    transcript_limit: int = Field(default=16, ge=1, le=30)
+    per_round_limit: int = Field(default=8, ge=1, le=15)
+    rounds: list[AcquisitionRound] = Field(default=[], max_length=2)
+    tried_video_ids: list[str] = Field(default=[], max_length=30)
+    search_provider_calls: int = 0
+    transcript_provider_calls: int = 0
+    # Started HTTP attempts, separately from conservative logical reservations.
+    youtube_http_calls: int = 0
+    youtube_quota_units: int = 0
+    transcript_http_calls: int = 0
+    search_cache_hits: int = 0
+    transcript_cache_hits: int = 0
+
+CompletionReason = Literal["target_met", "coverage_exhausted", "source_limit", "generation_limit", "budget_fit"]
+
+class DurationLedger(Contract):
+    version: Literal[2] = 2
+    measured_ready_media_ms: int = 0
+    reserved_practice_ms: int = 0
+    estimated_unready_media_ms: int = 0
+    reserved_closing_ms: int = 0
+    forecast_total_ms: int = 0
+    final_content_ms: int | None = None
+    original_content_ms: int = 0
+    extra_content_ms: int = 0
+    utilisation: float = 0
+    shortfall_ms: int = 0
+
+class OutcomeCoverage(Contract):
+    concept_id: str
+    outcome: str
+    evidence_segment_ids: list[str] = Field(max_length=20)
+    supported_facets: list[str] = Field(default=[], max_length=5)
+    used_claims: list[str] = Field(default=[], max_length=1)
+
+class PlanningState(Contract):
+    version: Literal[2] = 2
+    revision: int = 0
+    minimum_media_ms: int = Field(default=15000, ge=15000, le=40000)
+    activity_limit: int = Field(ge=1, le=80)
+    batch_limit: Literal[4] = 4
+    expansion_limit: int = Field(ge=1, le=80)
+    expansion_attempts: int = 0
+    candidate_attempts: int = 0
+    candidate_limit: int = 0
+    model_call_units: int = 0
+    model_call_limit: int = 0
+    work_seconds: float = 0
+    work_limit_seconds: int = 7200
+    completion_reason: CompletionReason | None = None
+    completion_detail: str = Field(default="", max_length=500)
+    coverage: list[OutcomeCoverage] = Field(default=[], max_length=80)
+    missing_coverage: list[CoverageGap] = Field(default=[], max_length=2)
+    deferred_concept_ids: list[str] = Field(default=[], max_length=80)
+
 class Lesson(Contract):
+    # None means legacy policy: never automatically expand old ready lessons.
+    planning: PlanningState | None = None
+    acquisition: AcquisitionLedger = Field(default_factory=AcquisitionLedger)
+    duration_ledger: DurationLedger | None = None
     teaching_plan_version: Literal[1, 2] = 1
     examples: list[ExampleRecord] = Field(default=[], max_length=2)
-    coverage_history: list[CoverageEntry] = Field(default=[], max_length=64)
+    coverage_history: list[CoverageEntry] = Field(default=[], max_length=83)
     plan_diagnostics: list[str] = Field(default=[], max_length=8)
     id: str
     request: SavedLearningRequest
