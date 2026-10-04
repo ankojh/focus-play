@@ -1,0 +1,100 @@
+[
+ {
+  "file": "00_document_header.md",
+  "section_id": "header",
+  "title": "Document header (title, subtitle, team and course)",
+  "bytes": 698,
+  "tables": 0
+ },
+ {
+  "file": "01_s01_executive_summary.md",
+  "section_id": "1",
+  "title": "1. Executive Summary",
+  "bytes": 2931,
+  "tables": 0
+ },
+ {
+  "file": "02_s02_business_case.md",
+  "section_id": "2",
+  "title": "2. Business Case",
+  "bytes": 15943,
+  "tables": 6
+ },
+ {
+  "file": "03_s03_who_persona_and_use_case.md",
+  "section_id": "3",
+  "title": "3. Who: Persona and Use Case",
+  "bytes": 3854,
+  "tables": 0
+ },
+ {
+  "file": "04_s04_customer_problem_statement.md",
+  "section_id": "4",
+  "title": "4. Customer Problem Statement",
+  "bytes": 1712,
+  "tables": 0
+ },
+ {
+  "file": "05_s05_competitors_and_alternatives.md",
+  "section_id": "5",
+  "title": "5. Competitors and Alternatives",
+  "bytes": 3741,
+  "tables": 1
+ },
+ {
+  "file": "06_s06_hypothesis_traceability.md",
+  "section_id": "6",
+  "title": "6. Hypothesis Traceability",
+  "bytes": 2582,
+  "tables": 1
+ },
+ {
+  "file": "07_s07_top_3_concepts_and_how_we_prioritized.md",
+  "section_id": "7",
+  "title": "7. Top 3 Concepts and How We Prioritized",
+  "bytes": 3454,
+  "tables": 1
+ },
+ {
+  "file": "08_s08_mvp_validation_plan.md",
+  "section_id": "8",
+  "title": "8. MVP Validation Plan",
+  "bytes": 6880,
+  "tables": 3
+ },
+ {
+  "file": "09_s10_product_roadmap.md",
+  "section_id": "10",
+  "title": "10. Product Roadmap",
+  "bytes": 13596,
+  "tables": 1
+ },
+ {
+  "file": "10_appendix_7a_full_kill_sheet.md",
+  "section_id": "A7A",
+  "title": "Appendix 7A: Full Kill Sheet",
+  "bytes": 2455,
+  "tables": 1
+ },
+ {
+  "file": "11_appendix_7b_concept_evolution.md",
+  "section_id": "A7B",
+  "title": "Appendix 7B: Concept Evolution",
+  "bytes": 1549,
+  "tables": 1
+ },
+ {
+  "file": "12_appendix_7c_feature_prioritization_kano_and_moscow.md",
+  "section_id": "A7C",
+  "title": "Appendix 7C: Feature Prioritization (Kano and MoSCoW)",
+  "bytes": 4979,
+  "tables": 1
+ },
+ {
+  "file": "13_sources.md",
+  "section_id": "sources",
+  "title": "Sources",
+  "bytes": 4159,
+  "tables": 0
+ }
+]
