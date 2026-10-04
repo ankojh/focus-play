@@ -224,6 +224,14 @@ export interface components {
              * @enum {string}
              */
             shape: "box" | "circle" | "bar";
+            /** Icon */
+            icon?: string | null;
+            /**
+             * Role
+             * @default neutral
+             * @enum {string}
+             */
+            role: "neutral" | "start" | "step" | "result" | "warning" | "good" | "bad";
             /** Value */
             value?: number | null;
         };
@@ -414,7 +422,7 @@ export interface components {
              * Template
              * @enum {string}
              */
-            template: "process" | "comparison" | "example" | "timeline" | "chart";
+            template: "process" | "comparison" | "example" | "timeline" | "chart" | "steps" | "cycle" | "dos_donts" | "key_fact";
             /** Prerequisites */
             prerequisites: string[];
         };
@@ -501,7 +509,7 @@ export interface components {
              * Template
              * @enum {string}
              */
-            template: "process" | "comparison" | "example" | "timeline" | "chart";
+            template: "process" | "comparison" | "example" | "timeline" | "chart" | "steps" | "cycle" | "dos_donts" | "key_fact";
             /** Nodes */
             nodes: components["schemas"]["DiagramNode"][];
             /** Connections */

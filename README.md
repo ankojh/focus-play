@@ -2,7 +2,7 @@
 
 Learn one point at a time with short local narrated diagrams. Enter a goal, your current knowledge, and a time budget. The server searches YouTube and reads video captions automatically. The dark Shorts interface is unchanged. Play the first short while the worker prepares later shorts.
 
-The application uses React, TypeScript, Vite, FastAPI, SQLite, a local Ollama model, and Kokoro CPU speech. In this release, factual narration and correct answer explanations use exact source excerpts. The model selects and orders these excerpts and supplies structured diagram relationships and questions. The application derives safe visual cues from the reusable templates. It does not freely paraphrase facts. Model processing, speech, saved transcripts, lesson records, and audio stay on this computer. New lessons need internet access: the goal and current knowledge go to YouTube search, and video IDs go to the Supadata caption service. Search titles and snippets are not teaching evidence.
+The application uses React, TypeScript, Vite, FastAPI, SQLite, a local Ollama model, and Kokoro CPU speech. The local model rewrites transcript content into clear, self-contained teaching narration and question explanations. Narration no longer copies YouTube speech word for word. Transcript quotes and timestamps remain available in Sources for attribution. A local model review checks for contradictions and unsupported claims and requests one rewrite when necessary; it can still miss errors. Diagrams use topic-specific icons, explanatory detail lines, colour-coded roles, and audio-synchronised highlights and arrows. Model processing, speech, saved transcripts, lesson records, and audio stay on this computer. New lessons need internet access: the goal and current knowledge go to YouTube search, and video IDs go to the Supadata caption service. Search titles and snippets are not teaching evidence.
 
 ## Setup on an Apple Silicon Mac
 
@@ -62,11 +62,15 @@ Open [Focus Play](http://127.0.0.1:5173). Enter the goal, current knowledge, and
 
 New lessons use official YouTube search plus [Supadata](https://docs.supadata.ai/api-reference/endpoint/transcript/transcript) for existing English captions. The official [caption download API](https://developers.google.com/youtube/v3/docs/captions/download) needs permission to edit a video; a search key does not supply that permission. Supadata reads captions from its own servers, so YouTube does not rate-limit this computer. It runs in `native` mode: it returns existing captions only and never generates paid AI transcripts. The free plan has 100 credits a month and one request a second; the server waits between requests. Missing keys, quota errors, used-up credits, and insufficient evidence give an error and **Retry**.
 
-Each acquisition attempt uses at most two queries. Each query asks for 15 results and drops Shorts, live streams, and videos over 30 minutes. Up to `RANK_CANDIDATES` (default 8) transcripts are then requested per query; each request costs one Supadata credit, including videos without captions, which are skipped. The local model scores each transcript from 1 to 5 for relevance, fit to the learner's current knowledge, teaching quality, on-topic density, and caption quality. The server keeps the three best videos with relevance of at least 3, level fit of at least 2, and at most two per channel. If no video passes, the second query runs. If the model cannot rank, YouTube's order is used. Scores and reasons are saved in the lesson as `video_rankings`. Search and caption caches last one day. Search and caption caches last one day. Adjacent captions form bounded teaching passages; their time bounds come from the actual caption records. Original caption records are also saved. Video IDs, titles, channels, URLs, and evidence timestamps remain in the lesson.
+Each acquisition attempt uses at most two queries. Each query asks for 15 results and drops Shorts, live streams, and videos over 30 minutes. Up to `RANK_CANDIDATES` (default 8) transcripts are then requested per query; each request costs one Supadata credit, including videos without captions, which are skipped. The local model scores each transcript from 1 to 5 for relevance, fit to the learner's current knowledge, teaching quality, on-topic density, and caption quality. The server keeps the three best videos with relevance of at least 3, level fit of at least 2, and at most two per channel. If no video passes, the second query runs. If the model cannot rank, YouTube's order is used. Scores and reasons are saved in the lesson as `video_rankings`. Search and caption caches last one day. Adjacent captions form bounded teaching passages; their time bounds come from the actual caption records. Original caption records are also saved. Video IDs, titles, channels, URLs, and evidence timestamps remain in the lesson.
 
 **Sources** is saved history. Old imports and original samples keep their labels and records. Old lessons still open. New `POST /api/lessons` requests accept `goal`, `prior_knowledge`, `time_budget_seconds`, `language`, and `request_id`. Source modes and source IDs are rejected. The import endpoint is removed. An extra short, including one added to an old lesson, uses only retrieved YouTube evidence. It searches again if existing YouTube evidence is insufficient.
 
 ## Configuration and data
+
+Diagrams have nine layouts: process, comparison, worked example, timeline, chart, numbered steps, cycle, do vs. don't, and key-fact callout. The model chooses icons from 218 bundled Lucide icons, so diagrams require no remote images or YouTube playback. Saved lessons without icons remain readable. New lessons use the updated narration and planning; already-ready shorts are not automatically rewritten.
+
+Passage retrieval shares the context across videos, penalises intros and sponsor reads, and includes neighbouring passages. Lessons start with basics and avoid repeated narration. All diagram motion follows the audio clock and honours reduced-motion preferences.
 
 See [.env.example](.env.example). `OLLAMA_MODEL` selects an installed local model. The default uses 8192 context tokens, at most 2200 output tokens, temperature 0, seed 42, and disabled thinking. The worker runs one model task at a time. Each short has two measured narration phrases. Word counts are bounded; measured audio sets the final duration. Kokoro uses `af_heart`, a fixed speech speed of 1, 24 kHz mono PCM WAV, and measured phrase boundaries. Captions are phrase aligned.
 
@@ -83,7 +87,7 @@ npm run types --prefix frontend
 npm run build --prefix frontend
 npm exec --prefix frontend -- playwright install chromium
 npm test --prefix frontend
-# Separate live browser test; YouTube key and local providers must be ready.
+# Separate live browser test; YouTube and Supadata keys and local providers must be ready.
 FOCUS_LIVE=1 npm test --prefix frontend -- tests/live.spec.ts
 ```
 

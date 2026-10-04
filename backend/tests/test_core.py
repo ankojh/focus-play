@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from app.config import Settings
-from app.contracts import *
+from app.contracts import (CandidateRanking, CandidateScore, Connection, DiagramNode, DraftAction, EvidenceRef, ImportRequest, Job, Lesson, LessonPlan, ModelShort, NarrationUnit, Objective, Question, SavedLearningRequest, Short, ShortDraft, TranscriptSegment)
 from app.errors import AppError, Cancelled
 from app.main import create_app
 from app.sources import parse_transcript, retrieve, video_id
@@ -20,13 +20,19 @@ def source(text="An index maps keys to rows. A scan tests many rows to find matc
     return parse_transcript(ImportRequest(title="Test source", text=text))
 
 
-def draft_for(segments, template="process", question=False):
+def draft_for(segments, template="process", question=False, tag=None):
     ref = EvidenceRef(source_id=segments[0].source_id, segment_ids=[segments[0].id], quote=segments[0].text)
+    half = len(segments[0].text.split())//2
+    texts = [" ".join(segments[0].text.split()[:half]), " ".join(segments[0].text.split()[half:])]
+    if tag:
+        # Distinct words per short so the repeated-narration check passes in lesson tests.
+        texts = [" ".join(f"{tag}u{i}w{k}" for k in range(20))+"." for i in range(2)]
     # Deliberately fixed content for contract tests only. This is not a production provider.
     return ShortDraft(objective="Understand an index lookup", prerequisites=[],
-        narration_units=[NarrationUnit(text=" ".join(segments[0].text.split()[:len(segments[0].text.split())//2]), evidence=ref),
-                         NarrationUnit(text=" ".join(segments[0].text.split()[len(segments[0].text.split())//2:]), evidence=ref)],
-        template=template, nodes=[DiagramNode(id="key",label="Search value",slot=0),DiagramNode(id="row",label="Matching row",slot=1)],
+        narration_units=[NarrationUnit(text=texts[0], evidence=ref), NarrationUnit(text=texts[1], evidence=ref)],
+        template=template, nodes=[DiagramNode(id="key",label="Search value",detail="The key you look up",icon="key",role="good" if template=="dos_donts" else "start",slot=0),
+                                  DiagramNode(id="row",label="Matching row",detail="Where the data lives",icon="table",role="bad" if template=="dos_donts" else "result",slot=1)]
+            + ([DiagramNode(id="plan",label="Query planner",detail="Chooses the access path",icon="route",role="step",slot=2)] if template=="cycle" else []),
         connections=[Connection(id="edge",source="key",target="row")], actions=[DraftAction(kind="appear",target="key",unit=0),DraftAction(kind="appear",target="row",unit=1),DraftAction(kind="draw",target="edge",unit=1)],
         question=Question(prompt="Which statement is in the supplied material?",options=[segments[0].text.split(". ")[0]+".","This is an incorrect answer."],answer_index=0,explanation=segments[0].text.split(". ")[0]+".",evidence=ref) if question else None)
 
@@ -74,6 +80,20 @@ def test_retrieval_is_bounded_and_relevant():
     found=retrieve([s],"database index",limit=1)
     assert len(found)==1 and "database index" in found[0].text
 
+
+def test_retrieval_skips_filler_shares_videos_and_keeps_spoken_order():
+    chatty=source("I want you to subscribe, my name is Sam and I drift cars.\n\nShift your weight to the rear.\n\nKick the clutch to break traction and start drifting.\n\nDrifting needs a rear wheel drive car.")
+    other=source("Counter steer to hold the drift angle.\n\nThanks for watching.")
+    other=other.model_copy(update={"id":"other","segments":[x.model_copy(update={"source_id":"other","id":f"other_{i}"}) for i,x in enumerate(other.segments)]})
+    found=retrieve([chatty,other],"I want to learn to drift a car",limit=4)
+    texts=[x.text for x in found]
+    assert not any("subscribe" in t for t in texts)
+    assert any("Counter steer" in t for t in texts)
+    # Matches bring the following passage for context, and each video stays in spoken order.
+    assert texts.index("Kick the clutch to break traction and start drifting.")<texts.index("Drifting needs a rear wheel drive car.")
+    # The budget fits the best passage but not its neighbour.
+    assert retrieve([chatty],"drift",budget=60)==[chatty.segments[2]]
+
 @pytest.mark.parametrize("change",[{"nodes":[{"id":"a","label":"A","slot":0},{"id":"b","label":"B","slot":0}]},{"actions":[{"kind":"appear","target":"<script>","unit":0}]},{"actions":[{"kind":"move","target":"key","unit":0,"to_slot":1}]},{"connections":[{"id":"edge","source":"key","target":"missing"}]},{"template":"javascript"}])
 def test_invalid_scene_cannot_enter_contract(change):
     payload=draft_for(source().segments).model_dump();payload.update(change)
@@ -89,7 +109,7 @@ def test_budget_reserves_unfinished_speech_and_question():
     assert planned_duration(shorts)==283000
 
 class StubModel:
-    def __init__(self, delay=0):self.calls=0;self.delay=delay
+    def __init__(self, delay: float=0):self.calls=0;self.delay=delay
     def fingerprint(self):return {"model":"test-only","digest":"stub","context":8192}
     def generate(self,contract,task,cancel,validate=None):
         from app.validation import SupportCheck
@@ -101,12 +121,12 @@ class StubModel:
         elif contract is SupportCheck:result=SupportCheck(supported=True,reason="Test only")
         elif contract is CandidateRanking:result=CandidateRanking(scores=[CandidateScore(video_id=c["video_id"],relevance=5,level_fit=5,teaching=5,density=5,captions=5,reason="Test only") for c in task["candidates"]])
         else:
-            draft=draft_for([TranscriptSegment.model_validate(s) for s in task["segments"]],task["template"],task["question_required"])
+            draft=draft_for([TranscriptSegment.model_validate(s) for s in task["segments"]],task["template"],task["question_required"],tag=f"s{self.calls}")
             body=draft.model_dump();body.pop("actions")
             for u in body['narration_units']:
                 u['segment_id']=u.pop('evidence')['segment_ids'][0];u.pop('start_ms');u.pop('end_ms')
             if body['question']:
-                body['question']['segment_id']=body['question'].pop('evidence')['segment_ids'][0];body['question'].pop('allowance_ms');body['question']['correct_answer']=body['question']['options'][body['question']['answer_index']];body['question']['distractors']=[o for i,o in enumerate(body['question'].pop('options')) if i!=body['question']['answer_index']];body['question'].pop('answer_index');body['question'].pop('explanation')
+                body['question']['segment_id']=body['question'].pop('evidence')['segment_ids'][0];body['question'].pop('allowance_ms');body['question']['correct_answer']=body['question']['options'][body['question']['answer_index']];body['question']['distractors']=[o for i,o in enumerate(body['question'].pop('options')) if i!=body['question']['answer_index']];body['question'].pop('answer_index')
             result=ModelShort.model_validate(body)
         if validate:validate(result)
         return result
@@ -139,11 +159,12 @@ class StubYouTube:
 
 def wait_for(client,lid,state="complete"):
     deadline=time.monotonic()+8
+    lesson={}
     while time.monotonic()<deadline:
-        l=client.get(f"/api/lessons/{lid}").json()
-        if l["job"]["status"]==state:return l
+        lesson=client.get(f"/api/lessons/{lid}").json()
+        if lesson["job"]["status"]==state:return lesson
         time.sleep(.01)
-    raise AssertionError(l)
+    raise AssertionError(lesson)
 
 
 def request_for(sid,rid="test-request-id"):
@@ -182,14 +203,14 @@ def test_job_idempotency_publication_retry_cancel_and_events(tmp_path):
 
 def test_restart_preserves_ready_short_and_marks_interruption(tmp_path):
     settings=Settings(data=tmp_path);store=Store(settings.data);s=source();store.put_source(s)
-    req=SavedLearningRequest(**request_for(s.id),source_mode="import",source_ids=[s.id]);l=Lesson(id="lesson",request=req,sources=[s],shorts=[Short(id="ready",objective="Saved output",status="ready",measured_duration_ms=2000),Short(id="later",objective="Unfinished",status="generating")],job=Job(id="job",lesson_id="lesson",status="running",created_at=time.time(),updated_at=time.time()))
-    store.save(l);store.close()
-    reopened=Store(settings.data);reopened.recover();l=reopened.lesson('lesson')
-    assert l.job.status=='interrupted' and l.shorts[0].status=='ready' and l.shorts[1].status=='failed';reopened.close()
+    req=SavedLearningRequest(**request_for(s.id),source_mode="import",source_ids=[s.id]);lesson=Lesson(id="lesson",request=req,sources=[s],shorts=[Short(id="ready",objective="Saved output",status="ready",measured_duration_ms=2000),Short(id="later",objective="Unfinished",status="generating")],job=Job(id="job",lesson_id="lesson",status="running",created_at=time.time(),updated_at=time.time()))
+    store.save(lesson);store.close()
+    reopened=Store(settings.data);reopened.recover();lesson=reopened.lesson('lesson')
+    assert lesson.job.status=='interrupted' and lesson.shorts[0].status=='ready' and lesson.shorts[1].status=='failed';reopened.close()
 
 
 def test_provider_and_origin_errors_are_actionable(tmp_path):
-    app=create_app(Settings(data=tmp_path),StubModel(),StubSpeech(Settings(data=tmp_path)))
+    app=create_app(Settings(data=tmp_path,youtube_key=""),StubModel(),StubSpeech(Settings(data=tmp_path)))
     with TestClient(app) as c:
         assert c.get('/api/sources/search?q=database').json()['code']=='YOUTUBE_KEY_MISSING'
         assert c.post('/api/lessons',json={},headers={'Origin':'https://hostile.test'}).status_code==403
@@ -277,7 +298,7 @@ def test_missing_and_remote_models_never_generate(monkeypatch,tmp_path):
         def get(self,*a,**kw):return httpx.Response(200,request=httpx.Request('GET','http://localhost/api/tags'),json={'models':[] if self.missing else [{'name':'qwen3:8b','digest':'test'}]})
         def post(self,*a,**kw):return httpx.Response(200,request=httpx.Request('POST','http://localhost/api/show'),json={'remote_host':'https://remote.test'} if self.remote else {})
     monkeypatch.setattr(httpx,'Client',Client)
-    model=Ollama(Settings(data=tmp_path))
+    model=Ollama(Settings(data=tmp_path,model="qwen3:8b"))
     with pytest.raises(AppError,match='ollama pull'):model.readiness()
     Client.missing=False;Client.remote=True
     with pytest.raises(AppError,match='remote service'):model.readiness()
@@ -294,24 +315,47 @@ def test_model_evidence_is_copied_from_source_not_generated():
     with pytest.raises(ValueError,match='existing'):attach_evidence(model,s.segments)
 
 
-def test_paraphrased_claim_and_answer_are_rejected_even_with_real_citations():
+def test_paraphrased_narration_is_accepted_but_video_references_and_repeats_are_not():
     s=source();draft=draft_for(s.segments,question=True)
+    draft.narration_units[0].text='You can think of an index as a shortcut that points straight to the matching rows.'
+    assert draft.question is not None
+    draft.question.explanation='The index stores where each key lives, so you skip the full scan.'
     validate_draft(draft,s.segments,True)
-    draft.narration_units[0].text='An index always guarantees faster performance for every query.'
-    with pytest.raises(ValueError,match='exact continuous excerpt'):
-        validate_draft(draft,s.segments,True)
-    draft=draft_for(s.segments,question=True)
-    draft.question.explanation='This invented explanation claims a guaranteed speed increase.'
-    with pytest.raises(ValueError,match='exact source text'):
-        validate_draft(draft,s.segments,True)
+    for text,reason in [('Step number three covers how the planner picks an index for you.','numbered step'),
+                        ('In this video the planner chooses whether to use an index.','video'),
+                        ('I always add an index before running a slow query on a table.','presenter'),
+                        ("We're going to see how the planner picks an index for a query.","'we'")]:
+        draft.narration_units[0].text=text
+        with pytest.raises(ValueError,match=reason):validate_draft(draft,s.segments,True)
+    draft.narration_units[0].text='The US census tables use indexes so you can find a household fast.'
+    validate_draft(draft,s.segments,True)
+    with pytest.raises(ValueError,match='repeats'):validate_draft(draft,s.segments,True,[draft.narration_units[1].text])
 
 
-def test_constrained_schema_couples_excerpt_and_segment(monkeypatch,tmp_path):
+@pytest.mark.parametrize('template,change,reason',[
+    ('process',lambda d:setattr(d.nodes[0],'icon','not-an-icon'),'icon'),
+    ('process',lambda d:setattr(d.nodes[0],'detail',''),'detail'),
+    ('dos_donts',lambda d:setattr(d.nodes[1],'role','good'),'role good and one with role bad'),
+    ('cycle',lambda d:d.nodes.pop(),'3 or 4 nodes')])
+def test_diagram_needs_icons_details_and_template_structure(template,change,reason):
+    s=source();draft=draft_for(s.segments,template=template)
+    validate_draft(draft,s.segments,False)
+    change(draft)
+    with pytest.raises(ValueError,match=reason):validate_draft(draft,s.segments,False)
+
+
+def test_icon_lists_match_between_backend_and_frontend():
+    import re
+    from app.icons import ICONS
+    frontend=(Path(__file__).resolve().parents[2]/'frontend'/'src'/'icons.ts').read_text()
+    assert sorted(re.findall(r"^  '([a-z0-9-]+)':",frontend,re.M))==sorted(ICONS)
+
+
+def test_schema_allows_written_narration_but_constrains_citations_and_icons(monkeypatch,tmp_path):
     import httpx,jsonschema
     s=source();other=source('A different source describes a different topic. This passage must not support a database index quotation. It contains enough words for a useful standalone record, but it does not provide evidence for an index explanation in this test case.')
     draft=draft_for(s.segments);body=draft.model_dump();body.pop("actions");body['nodes'][0]['id']='node_0';body['nodes'][1]['id']='node_1';body['connections']=[{'id':'conn_0','source':'node_0','target':'node_1'}]
-    sentences=s.segments[0].text.split('. ')
-    texts=['. '.join(sentences[:2])+'.','. '.join(sentences[2:])]
+    texts=['You can picture an index as a sorted list of keys with row locations.','Your query then jumps to the rows instead of checking every one in turn.']
     for i,u in enumerate(body['narration_units']):
         u['text']=texts[i];u['segment_id']=u.pop('evidence')['segment_ids'][0];u.pop('start_ms');u.pop('end_ms')
     captured=[]
@@ -326,10 +370,12 @@ def test_constrained_schema_couples_excerpt_and_segment(monkeypatch,tmp_path):
         def __exit__(self,*a):pass
         def stream(self,*a,**kw):captured.append(kw['json']['format']);return Response()
     monkeypatch.setattr(httpx,'Client',Client)
-    task={'segments':[x.model_dump() for x in s.segments+other.segments],'template':'process','question_required':False}
+    task={'segments':[x.model_dump() for x in s.segments],'template':'process','question_required':False}
     model=Ollama(Settings(data=tmp_path));model.generate(ModelShort,task,threading.Event())
-    wrong=json.loads(json.dumps(body));wrong['narration_units'][0]['segment_id']=other.segments[0].id
-    with pytest.raises(jsonschema.ValidationError):jsonschema.validate(wrong,captured[0])
+    jsonschema.validate(body,captured[0])
+    for change in (lambda b:b['narration_units'][0].update(segment_id=other.segments[0].id),lambda b:b['nodes'][0].update(icon='not-an-icon'),lambda b:b['nodes'][0].pop('icon')):
+        wrong=json.loads(json.dumps(body));change(wrong)
+        with pytest.raises(jsonschema.ValidationError):jsonschema.validate(wrong,captured[0])
 
 
 def test_chart_cannot_use_a_partial_numeric_match_or_missing_values():

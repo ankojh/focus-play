@@ -1,7 +1,41 @@
 import re
 import hashlib
 from .contracts import EvidenceRef, ShortDraft, Contract
+from .icons import ICONS
 from pydantic import Field
+
+# Narration is spoken without the source video. These phrases point at context the learner cannot see.
+DANGLING = [
+    (re.compile(r"\b(this|that|my|our|today's) (video|channel)\b|\bin the video\b", re.I), "a video or channel"),
+    (re.compile(r"\bstep (number )?(one|two|three|four|five|six|\d+)\b", re.I), "a numbered step from a video"),
+    (re.compile(r"\b(that's|that is|this is) the (first|second|third|next|last) step\b", re.I), "a step from a video"),
+    (re.compile(r"\bas (i|we|you) (said|mentioned|saw)\b|\bas mentioned\b|\bbefore we\b", re.I), "something said earlier"),
+    (re.compile(r"\b(guys|subscribe|smash that|like button)\b", re.I), "presenter filler"),
+    (re.compile(r"\b(I|I'm|I've|I'll|I'd)\b"), "the presenter as 'I'"),
+    # Case-sensitive so "US" is not read as "us".
+    (re.compile(r"\b([Ww]e|[Ww]e're|[Ww]e've|[Ww]e'll|[Oo]ur|us)\b"), "'we' or 'our'"),
+]
+CYCLE_MIN, KEY_FACT_MIN = 3, 2
+
+
+def word_set(text):
+    return set(re.findall(r"[a-z0-9']+", text.lower()))
+
+
+def similar(a, b, threshold=.7):
+    x, y = word_set(a), word_set(b)
+    return bool(x and y) and len(x & y) / len(x | y) >= threshold
+
+
+def check_narration(texts, earlier=()):
+    for text in texts:
+        for pattern, what in DANGLING:
+            match = pattern.search(text)
+            if match:
+                raise ValueError(f"Narration '{match.group(0)}' refers to {what}. Rewrite it as a teacher speaking to 'you' with no reference to a video.")
+    for i, text in enumerate(texts):
+        if any(similar(text, other) for other in list(texts[:i]) + list(earlier)):
+            raise ValueError("Narration repeats an earlier point. Teach something new for this objective.")
 
 class SupportCheck(Contract):
     supported: bool
@@ -28,19 +62,32 @@ def validate_evidence(ref: EvidenceRef, segments):
         ref.end_ms = max(s.end_ms for s in selected)
 
 
-def validate_draft(draft: ShortDraft, segments, require_question: bool):
+def validate_diagram(draft: ShortDraft):
+    for node in draft.nodes:
+        if node.icon not in ICONS:
+            raise ValueError(f"Node {node.id} needs an icon from the allowed list.")
+        if len(node.detail.split()) < 2:
+            raise ValueError(f"Node {node.id} needs a detail line of 3 to 8 words that explains it.")
+    roles = {node.role for node in draft.nodes}
+    if draft.template == "dos_donts" and not {"good", "bad"} <= roles:
+        raise ValueError("A dos_donts diagram needs at least one node with role good and one with role bad.")
+    if draft.template == "cycle" and len(draft.nodes) < CYCLE_MIN:
+        raise ValueError("A cycle diagram needs 3 or 4 nodes.")
+    if draft.template == "key_fact" and len(draft.nodes) < KEY_FACT_MIN:
+        raise ValueError("A key_fact diagram needs the main fact in node_0 plus 1 to 3 supporting nodes.")
+
+
+def validate_draft(draft: ShortDraft, segments, require_question: bool, earlier=()):
     for unit in draft.narration_units:
         validate_evidence(unit.evidence, segments)
-        if normalize(unit.text) not in normalize(unit.evidence.quote):
-            raise ValueError("Narration must be an exact continuous excerpt from its selected source segment. Do not paraphrase.")
+    check_narration([unit.text for unit in draft.narration_units], earlier)
+    validate_diagram(draft)
     if require_question and draft.question is None:
         raise ValueError("This short must include a question.")
     if not require_question and draft.question is not None:
         raise ValueError("No question is planned for this short.")
     if draft.question:
         validate_evidence(draft.question.evidence, segments)
-        if normalize(draft.question.options[draft.question.answer_index]) not in normalize(draft.question.evidence.quote) or normalize(draft.question.explanation) not in normalize(draft.question.evidence.quote):
-            raise ValueError("The correct answer and explanation must use exact source text.")
     # Charts use supplied numeric values only; reject invented measurements.
     values={float(value) for s in segments for value in re.findall(r"(?<![\w.])\d+(?:\.\d+)?(?![\w.])",s.text)}
     if draft.template == "chart" and any(node.value is None for node in draft.nodes):
@@ -57,7 +104,10 @@ def planned_duration(shorts):
 
 
 def verify_support(model, draft, segments, cancel):
-    result = model.generate(SupportCheck, {"task": "Check every factual narration unit, diagram label/detail, and question answer against its quoted evidence. Reject unsupported details, disagreement mixed together, or unseen visual context. Reject a claim about fewer disk reads or a measured speed increase unless the source supplies that evidence. Do not replace a conditional claim with a guarantee. Reject a question with an unsupported premise or more than one correct choice. This is a model review, not independent fact verification.", "draft": draft.model_dump(), "segments": [s.model_dump() for s in segments]}, cancel)
+    result = model.generate(SupportCheck, {"task": "Review this short against the supplied passages. The narration is a teacher's paraphrase; rewording and simplifying are fine. "
+        "Reject only when a narration unit, diagram detail, or question answer states something the passages contradict or do not teach at all, "
+        "turns a conditional claim into a guarantee, or when a question has more than one correct choice. Give the specific problem as the reason. "
+        "This is a model review, not independent fact verification.", "draft": draft.model_dump(), "segments": [s.model_dump() for s in segments]}, cancel)
     if not result.supported:
         raise ValueError("The model source review rejected this short: " + result.reason)
 
@@ -90,7 +140,7 @@ def attach_evidence(content, segments):
         options.insert(index,answer)
         if len({o.strip().lower() for o in options})!=len(options):
             raise ValueError("Question choices must be distinct.")
-        question["options"],question["answer_index"],question["explanation"]=options,index,answer
+        question["options"],question["answer_index"]=options,index
     result=ShortDraft.model_validate(body)
     refine_cues(result)
     return result
@@ -98,18 +148,6 @@ def attach_evidence(content, segments):
 
 def normalize(text):
     return re.sub(r"\s+", " ", text).strip()
-
-
-def source_excerpts(segments, max_length=300):
-    excerpts=[]
-    for segment in segments:
-        sentences=re.split(r"(?<=[.!?])\s+", segment.text)
-        for i in range(len(sentences)):
-            for count in (1,2):
-                excerpt=" ".join(sentences[i:i+count]).strip()
-                if 10<=len(excerpt)<=max_length and normalize(excerpt) in normalize(segment.text):
-                    excerpts.append(excerpt)
-    return list(dict.fromkeys(excerpts))
 
 
 def terms(text):

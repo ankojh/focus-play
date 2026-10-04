@@ -518,6 +518,32 @@
             "title": "Shape",
             "default": "box"
           },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "neutral",
+              "start",
+              "step",
+              "result",
+              "warning",
+              "good",
+              "bad"
+            ],
+            "title": "Role",
+            "default": "neutral"
+          },
           "value": {
             "anyOf": [
               {
@@ -920,13 +946,19 @@
               "comparison",
               "example",
               "timeline",
-              "chart"
+              "chart",
+              "steps",
+              "cycle",
+              "dos_donts",
+              "key_fact"
             ],
             "title": "Template"
           },
           "prerequisites": {
             "items": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 80,
+              "minLength": 1
             },
             "type": "array",
             "maxItems": 4,
@@ -1132,7 +1164,11 @@
               "comparison",
               "example",
               "timeline",
-              "chart"
+              "chart",
+              "steps",
+              "cycle",
+              "dos_donts",
+              "key_fact"
             ],
             "title": "Template"
           },

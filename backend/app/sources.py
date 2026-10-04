@@ -77,18 +77,44 @@ def parse_transcript(request: ImportRequest) -> Source:
                   transcript_status="available", provenance=request.provenance, content_hash=digest, segments=segments)
 
 
-def retrieve(sources: list[Source], goal: str, limit: int = 12) -> list[TranscriptSegment]:
-    stop = {"the", "a", "an", "to", "of", "and", "me", "help", "understand", "learn", "what", "is", "about", "how"}
-    words = set(re.findall(r"[a-z0-9]+", goal.lower())) - stop
-    candidates = [s for source in sources for s in source.segments]
-    ranked = sorted(enumerate(candidates), key=lambda pair: (-len(words & set(re.findall(r"[a-z0-9]+", pair[1].text.lower()))), pair[0]))
-    selected, length = [], 0
-    for _, segment in ranked[:limit]:
-        if length + len(segment.text) > 10000:
-            break
-        selected.append(segment)
-        length += len(segment.text)
-    return selected
+STOP = {"the", "a", "an", "to", "of", "and", "me", "help", "understand", "learn", "what", "is", "about", "how",
+        "i", "want", "my", "you", "your", "can", "do", "get", "be", "in", "for", "with", "on", "it", "this", "that", "know", "like"}
+# Intros, sponsor reads, and channel chatter match goal words but teach nothing.
+FILLER = re.compile(r"\[music\]|\[applause\]|subscribe|discount code|sponsor|my name is|welcome (back )?to|in this video|link in the description", re.I)
+
+
+def stems(text: str) -> set[str]:
+    # A five-letter prefix matches drift/drifting/drifted without a stemming library.
+    return {w[:5] for w in re.findall(r"[a-z0-9]+", text.lower()) if w not in STOP}
+
+
+def retrieve(sources: list[Source], goal: str, limit: int = 20, budget: int = 4500) -> list[TranscriptSegment]:
+    """Pick the passages that best teach the goal, shared across videos, each with the passage that follows it."""
+    words = stems(goal)
+    def score(segment):
+        return len(words & stems(segment.text)) - (3 if FILLER.search(segment.text) else 0)
+    queues = []
+    for source in sources:
+        ranked = sorted(range(len(source.segments)), key=lambda i: (-score(source.segments[i]), i))
+        queues.append([source.segments, [i for i in ranked if score(source.segments[i]) > 0]])
+    chosen, length = {}, 0
+    # Round-robin across videos so one long transcript cannot fill the context.
+    while len(chosen) < limit and any(q for _, q in queues):
+        for order, (segments, queue) in enumerate(queues):
+            if not queue:
+                continue
+            i = queue.pop(0)
+            for j in (i, i + 1):
+                key = (order, j)
+                if j >= len(segments) or key in chosen or len(chosen) >= limit:
+                    continue
+                if length + len(segments[j].text) > budget:
+                    queue.clear()
+                    break
+                chosen[key] = segments[j]
+                length += len(segments[j].text)
+    # Keep each video's passages in spoken order.
+    return [chosen[key] for key in sorted(chosen)]
 
 
 SEARCH_RESULTS = 15
@@ -100,7 +126,7 @@ def youtube_get(path: str, params: dict) -> httpx.Response:
     try:
         response = httpx.get(f"https://www.googleapis.com/youtube/v3/{path}", params=params, timeout=15, follow_redirects=False, trust_env=False)
     except httpx.HTTPError:
-        raise AppError("SOURCE_NETWORK_FAILED", "YouTube search failed. Check the internet connection, then retry.", 503)
+        raise AppError("SOURCE_NETWORK_FAILED", "YouTube search failed. Check the internet connection, then retry.", 503) from None
     if response.status_code == 403:
         raise AppError("YOUTUBE_QUOTA_OR_ACCESS", "YouTube rejected the request. Check the API quota and key, then retry.", 503)
     if not response.is_success:
@@ -128,14 +154,14 @@ def search_youtube(query: str, key: str) -> list[dict]:
             if re.fullmatch(r"[A-Za-z0-9_-]{11}", vid) and item["snippet"].get("liveBroadcastContent", "none") == "none":
                 results.append({"video_id": vid, "title": html.unescape(item["snippet"]["title"]), "channel": html.unescape(item["snippet"]["channelTitle"]), "url": f"https://www.youtube.com/watch?v={vid}", "transcript_status": "needed"})
     except (ValueError,KeyError,TypeError,AttributeError):
-        raise AppError("SOURCE_SEARCH_FAILED", "YouTube returned invalid search data. Retry to search again.",503)
+        raise AppError("SOURCE_SEARCH_FAILED", "YouTube returned invalid search data. Retry to search again.",503) from None
     if not results:
         return results
     details = youtube_get("videos", {"key": key, "part": "contentDetails", "id": ",".join(r["video_id"] for r in results)})
     try:
         durations = {item["id"]: iso_seconds(item["contentDetails"]["duration"]) for item in details.json().get("items", [])}
     except (ValueError,KeyError,TypeError,AttributeError):
-        raise AppError("SOURCE_SEARCH_FAILED", "YouTube returned invalid video data. Retry to search again.",503)
+        raise AppError("SOURCE_SEARCH_FAILED", "YouTube returned invalid video data. Retry to search again.",503) from None
     kept = []
     for result in results:
         seconds = durations.get(result["video_id"])

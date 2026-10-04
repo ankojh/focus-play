@@ -1,15 +1,15 @@
 import asyncio
 import json
 import re
-import time
 from contextlib import asynccontextmanager
-from pathlib import Path
-from fastapi import FastAPI, Request, Query
+
+from fastapi import FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+
 from .config import Settings
-from .contracts import LearningRequest, Lesson, Source, SourceList, ExplanationRequest, ProviderHealth, SearchResponse
+from .contracts import ExplanationRequest, LearningRequest, Lesson, ProviderHealth, SearchResponse, SourceList
 from .errors import AppError
 from .jobs import Jobs, cache_key
 from .providers import Ollama, Speech, health
@@ -107,7 +107,7 @@ def create_app(settings=None, model=None, speech=None, youtube=None):
         try:
             cursor = max(0, int(request.headers.get("last-event-id", str(after))))
         except ValueError:
-            raise AppError("INVALID_EVENT_ID", "The event ID is invalid. Reload the lesson.")
+            raise AppError("INVALID_EVENT_ID", "The event ID is invalid. Reload the lesson.") from None
         async def stream():
             nonlocal cursor
             yield f"event: snapshot\ndata: {lesson.model_dump_json()}\n\n"

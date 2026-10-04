@@ -31,7 +31,7 @@ class TranscriptSegment(Contract):
     def timing(self):
         if (self.start_ms is None) != (self.end_ms is None):
             raise ValueError("Both transcript times are required.")
-        if self.start_ms is not None and self.end_ms <= self.start_ms:
+        if self.start_ms is not None and self.end_ms is not None and self.end_ms <= self.start_ms:
             raise ValueError("The transcript end must follow its start.")
         return self
 
@@ -68,13 +68,18 @@ class NarrationUnit(Contract):
     start_ms: int = 0
     end_ms: int = 0
 
-Template = Literal["process", "comparison", "example", "timeline", "chart"]
+Template = Literal["process", "comparison", "example", "timeline", "chart", "steps", "cycle", "dos_donts", "key_fact"]
+# Roles colour a node: start, step and result for sequences, good and bad for do vs. don't.
+Role = Literal["neutral", "start", "step", "result", "warning", "good", "bad"]
 class DiagramNode(Contract):
     id: str = Field(pattern=r"^[a-z][a-z0-9_]{0,19}$")
     label: str = Field(min_length=1, max_length=44)
     detail: str = Field(default="", max_length=70)
     slot: int = Field(ge=0, le=3)
     shape: Literal["box", "circle", "bar"] = "box"
+    # Saved lessons predate icons and roles; the defaults render as before.
+    icon: str | None = Field(default=None, max_length=30)
+    role: Role = "neutral"
     @model_validator(mode="after")
     def label_bounds(self):
         if any(len(word) > 24 for word in (self.label + " " + self.detail).split()):
@@ -179,7 +184,7 @@ class Short(Contract):
 class Objective(Contract):
     title: str = Field(min_length=5, max_length=150)
     template: Template
-    prerequisites: list[str] = Field(max_length=4)
+    prerequisites: list[Annotated[str, Field(min_length=1, max_length=80)]] = Field(max_length=4)
 
 class LessonPlan(Contract):
     sufficient_evidence: bool
@@ -259,21 +264,22 @@ class SearchResponse(Contract):
     cached: bool
     acquisition: Literal["assisted"] = "assisted"
 
-# Model contracts select evidence by ID. The server copies quotes and times from
-# the stored segment; the model cannot invent quotation or timing fields.
+# Model contracts cite evidence by ID. The model writes narration in its own words;
+# the server copies quotes and times from the cited segment.
 class ModelUnit(Contract):
     text: str = Field(min_length=10, max_length=300)
     segment_id: str
 
 class ModelQuestion(Contract):
     prompt: str = Field(min_length=10, max_length=240)
-    correct_answer: str = Field(min_length=10, max_length=180)
+    correct_answer: str = Field(min_length=1, max_length=180)
     distractors: list[Annotated[str, Field(min_length=1, max_length=180)]] = Field(min_length=1, max_length=3)
+    explanation: str = Field(min_length=10, max_length=300)
     segment_id: str
 
 class ModelShort(Contract):
     objective: str = Field(min_length=5, max_length=150)
-    prerequisites: list[str] = Field(max_length=4)
+    prerequisites: list[Annotated[str, Field(min_length=1, max_length=80)]] = Field(max_length=4)
     narration_units: list[ModelUnit] = Field(min_length=2, max_length=2)
     template: Template
     nodes: list[DiagramNode] = Field(min_length=2, max_length=4)

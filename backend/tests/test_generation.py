@@ -1,0 +1,122 @@
+"""Regressions for local model stalls and paraphrased short review."""
+import asyncio
+import json
+import threading
+
+import httpx
+import pytest
+
+from app.config import Settings
+from app.contracts import LessonPlan
+from app.errors import AppError
+from app.jobs import Jobs
+from app.providers import Ollama
+from app.store import Store
+from app.validation import SupportCheck, attach_evidence, validate_draft
+from test_core import StubModel, StubSpeech, draft_for, source
+
+
+def test_repeated_output_is_repaired_and_prompt_prefill_has_time(monkeypatch, tmp_path):
+    attempts = []
+    timeouts = []
+    plan = {"sufficient_evidence": True, "reason": "Test only", "objectives": []}
+
+    class Response:
+        is_success = True
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def iter_lines(self):
+            output = "practice-" * 100 if len(attempts) == 1 else json.dumps(plan)
+            yield json.dumps({"message": {"content": output}, "done": True})
+
+    class Client:
+        def __init__(self, **kwargs):
+            timeouts.append(kwargs["timeout"])
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def stream(self, *args, **kwargs):
+            attempts.append(kwargs["json"])
+            return Response()
+
+    monkeypatch.setattr(httpx, "Client", Client)
+    result = Ollama(Settings(data=tmp_path)).generate(LessonPlan, {}, threading.Event())
+    assert isinstance(result, LessonPlan)
+    assert result.sufficient_evidence
+    assert len(attempts) == 2
+    assert "repeating" in attempts[1]["messages"][-1]["content"]
+    assert timeouts[0].read == 120
+    assert timeouts[0].connect == 5
+
+
+def test_generation_wall_clock_limit_is_bounded(monkeypatch, tmp_path):
+    from app import providers
+
+    ticks = iter([0, 301])
+    monkeypatch.setattr(providers.time, "monotonic", lambda: next(ticks))
+
+    class Response:
+        is_success = True
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def iter_lines(self):
+            yield json.dumps({"message": {"content": "{}"}, "done": True})
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def stream(self, *args, **kwargs):
+            return Response()
+
+    monkeypatch.setattr(httpx, "Client", Client)
+    with pytest.raises(AppError) as error:
+        Ollama(Settings(data=tmp_path)).generate(LessonPlan, {}, threading.Event())
+    assert error.value.code == "MODEL_TIMEOUT"
+
+
+def test_source_review_rewrites_once_with_the_rejection_reason(tmp_path):
+    class Reviewer(StubModel):
+        reviews = 0
+
+        def generate(self, contract, task, cancel, validate=None):
+            if contract is SupportCheck:
+                self.reviews += 1
+                return SupportCheck(supported=self.reviews > 1, reason="Avoid the unsupported guarantee.")
+            assert "unsupported guarantee" in task["task"]
+            return super().generate(contract, task, cancel, validate)
+
+    settings = Settings(data=tmp_path)
+    store = Store(settings.data)
+    model = Reviewer()
+    jobs = Jobs(store, model, StubSpeech(settings), settings)
+    segments = source().segments
+    task = {"task": "Teach the point.", "template": "process", "question_required": False,
+            "segments": [s.model_dump() for s in segments]}
+    try:
+        draft = asyncio.run(jobs.reviewed(draft_for(segments), task, segments,
+            lambda value: validate_draft(attach_evidence(value, segments), segments, False), threading.Event()))
+        assert model.reviews == 2 and model.calls == 1
+        validate_draft(draft, segments, False)
+    finally:
+        store.close()
