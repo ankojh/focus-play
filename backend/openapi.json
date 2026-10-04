@@ -1,0 +1,1565 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Focus Play local API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/health": {
+      "get": {
+        "summary": "Readiness",
+        "operationId": "readiness_api_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderHealth"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sources": {
+      "get": {
+        "summary": "Sources",
+        "operationId": "sources_api_sources_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sources/search": {
+      "get": {
+        "summary": "Search",
+        "operationId": "search_api_sources_search_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 200,
+              "title": "Q"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lessons": {
+      "get": {
+        "summary": "Lessons",
+        "operationId": "lessons_api_lessons_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Lesson"
+                  },
+                  "type": "array",
+                  "title": "Response Lessons Api Lessons Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create",
+        "operationId": "create_api_lessons_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LearningRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Lesson"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lessons/{lid}": {
+      "get": {
+        "summary": "Snapshot",
+        "operationId": "snapshot_api_lessons__lid__get",
+        "parameters": [
+          {
+            "name": "lid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Lid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Lesson"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lessons/{lid}/cancel": {
+      "post": {
+        "summary": "Cancel",
+        "operationId": "cancel_api_lessons__lid__cancel_post",
+        "parameters": [
+          {
+            "name": "lid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Lid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Lesson"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lessons/{lid}/retry": {
+      "post": {
+        "summary": "Retry",
+        "operationId": "retry_api_lessons__lid__retry_post",
+        "parameters": [
+          {
+            "name": "lid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Lid"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Lesson"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lessons/{lid}/shorts/{sid}/explanations": {
+      "post": {
+        "summary": "Explanation",
+        "operationId": "explanation_api_lessons__lid__shorts__sid__explanations_post",
+        "parameters": [
+          {
+            "name": "lid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Lid"
+            }
+          },
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExplanationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Lesson"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lessons/{lid}/events": {
+      "get": {
+        "summary": "Events",
+        "operationId": "events_api_lessons__lid__events_get",
+        "parameters": [
+          {
+            "name": "lid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Lid"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "After"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/audio/{name}": {
+      "get": {
+        "summary": "Audio",
+        "operationId": "audio_api_audio__name__get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Connection": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,19}$",
+            "title": "Id"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "target": {
+            "type": "string",
+            "title": "Target"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "target"
+        ],
+        "title": "Connection"
+      },
+      "DiagramNode": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,19}$",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 44,
+            "minLength": 1,
+            "title": "Label"
+          },
+          "detail": {
+            "type": "string",
+            "maxLength": 70,
+            "title": "Detail",
+            "default": ""
+          },
+          "slot": {
+            "type": "integer",
+            "maximum": 3.0,
+            "minimum": 0.0,
+            "title": "Slot"
+          },
+          "shape": {
+            "type": "string",
+            "enum": [
+              "box",
+              "circle",
+              "bar"
+            ],
+            "title": "Shape",
+            "default": "box"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "slot"
+        ],
+        "title": "DiagramNode"
+      },
+      "ErrorInfo": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorInfo"
+      },
+      "EvidenceRef": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "segment_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 4,
+            "minItems": 1,
+            "title": "Segment Ids"
+          },
+          "start_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Ms"
+          },
+          "end_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Ms"
+          },
+          "quote": {
+            "type": "string",
+            "maxLength": 1800,
+            "minLength": 1,
+            "title": "Quote"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_id",
+          "segment_ids",
+          "quote"
+        ],
+        "title": "EvidenceRef"
+      },
+      "ExplanationRequest": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "example",
+              "again"
+            ],
+            "title": "Kind"
+          },
+          "added_seconds": {
+            "type": "integer",
+            "const": 40,
+            "title": "Added Seconds",
+            "default": 40
+          },
+          "request_id": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 8,
+            "title": "Request Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "request_id"
+        ],
+        "title": "ExplanationRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Job": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "lesson_id": {
+            "type": "string",
+            "title": "Lesson Id"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage",
+            "default": "queued"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "complete",
+              "failed",
+              "cancelled",
+              "interrupted"
+            ],
+            "title": "Status",
+            "default": "queued"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "event_sequence": {
+            "type": "integer",
+            "title": "Event Sequence",
+            "default": 0
+          },
+          "stage_timings": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Stage Timings",
+            "default": {}
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "number",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "lesson_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Job"
+      },
+      "LearningRequest": {
+        "properties": {
+          "goal": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Goal"
+          },
+          "prior_knowledge": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Prior Knowledge",
+            "default": "beginner"
+          },
+          "time_budget_seconds": {
+            "type": "integer",
+            "maximum": 1200.0,
+            "minimum": 60.0,
+            "title": "Time Budget Seconds",
+            "default": 300
+          },
+          "language": {
+            "type": "string",
+            "const": "en",
+            "title": "Language",
+            "default": "en"
+          },
+          "request_id": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 8,
+            "title": "Request Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "goal",
+          "request_id"
+        ],
+        "title": "LearningRequest"
+      },
+      "Lesson": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "request": {
+            "$ref": "#/components/schemas/SavedLearningRequest"
+          },
+          "objectives": {
+            "items": {
+              "$ref": "#/components/schemas/Objective"
+            },
+            "type": "array",
+            "title": "Objectives",
+            "default": []
+          },
+          "short_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Short Ids",
+            "default": []
+          },
+          "shorts": {
+            "items": {
+              "$ref": "#/components/schemas/Short"
+            },
+            "type": "array",
+            "title": "Shorts",
+            "default": []
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/Source"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "preparing",
+              "partially_ready",
+              "ready",
+              "failed",
+              "cancelled",
+              "interrupted"
+            ],
+            "title": "Status",
+            "default": "queued"
+          },
+          "planned_duration_ms": {
+            "type": "integer",
+            "title": "Planned Duration Ms",
+            "default": 0
+          },
+          "original_planned_duration_ms": {
+            "type": "integer",
+            "title": "Original Planned Duration Ms",
+            "default": 0
+          },
+          "extra_allowance_ms": {
+            "type": "integer",
+            "title": "Extra Allowance Ms",
+            "default": 0
+          },
+          "job": {
+            "$ref": "#/components/schemas/Job"
+          },
+          "provider_settings": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Provider Settings",
+            "default": {}
+          },
+          "metrics": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Metrics",
+            "default": {}
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "request",
+          "sources",
+          "job"
+        ],
+        "title": "Lesson"
+      },
+      "NarrationUnit": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 600,
+            "minLength": 10,
+            "title": "Text"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/EvidenceRef"
+          },
+          "start_ms": {
+            "type": "integer",
+            "title": "Start Ms",
+            "default": 0
+          },
+          "end_ms": {
+            "type": "integer",
+            "title": "End Ms",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "text",
+          "evidence"
+        ],
+        "title": "NarrationUnit"
+      },
+      "Objective": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 150,
+            "minLength": 5,
+            "title": "Title"
+          },
+          "template": {
+            "type": "string",
+            "enum": [
+              "process",
+              "comparison",
+              "example",
+              "timeline",
+              "chart"
+            ],
+            "title": "Template"
+          },
+          "prerequisites": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 4,
+            "title": "Prerequisites"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "template",
+          "prerequisites"
+        ],
+        "title": "Objective"
+      },
+      "ProviderHealth": {
+        "properties": {
+          "ready": {
+            "type": "boolean",
+            "title": "Ready"
+          },
+          "model_ready": {
+            "type": "boolean",
+            "title": "Model Ready"
+          },
+          "speech_ready": {
+            "type": "boolean",
+            "title": "Speech Ready"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digest"
+          },
+          "speech_provider": {
+            "type": "string",
+            "title": "Speech Provider"
+          },
+          "voice": {
+            "type": "string",
+            "title": "Voice"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "youtube_ready": {
+            "type": "boolean",
+            "title": "Youtube Ready",
+            "default": false
+          },
+          "youtube_message": {
+            "type": "string",
+            "title": "Youtube Message",
+            "default": "YouTube source setup has not been checked."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "ready",
+          "model_ready",
+          "speech_ready",
+          "model",
+          "speech_provider",
+          "voice",
+          "message"
+        ],
+        "title": "ProviderHealth"
+      },
+      "Question": {
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 240,
+            "minLength": 10,
+            "title": "Prompt"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 4,
+            "minItems": 2,
+            "title": "Options"
+          },
+          "answer_index": {
+            "type": "integer",
+            "maximum": 3.0,
+            "minimum": 0.0,
+            "title": "Answer Index"
+          },
+          "explanation": {
+            "type": "string",
+            "maxLength": 600,
+            "minLength": 10,
+            "title": "Explanation"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/EvidenceRef"
+          },
+          "allowance_ms": {
+            "type": "integer",
+            "const": 20000,
+            "title": "Allowance Ms",
+            "default": 20000
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "prompt",
+          "options",
+          "answer_index",
+          "explanation",
+          "evidence"
+        ],
+        "title": "Question"
+      },
+      "SavedLearningRequest": {
+        "properties": {
+          "goal": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Goal"
+          },
+          "prior_knowledge": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Prior Knowledge",
+            "default": "beginner"
+          },
+          "time_budget_seconds": {
+            "type": "integer",
+            "maximum": 1200.0,
+            "minimum": 60.0,
+            "title": "Time Budget Seconds",
+            "default": 300
+          },
+          "language": {
+            "type": "string",
+            "const": "en",
+            "title": "Language",
+            "default": "en"
+          },
+          "request_id": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 8,
+            "title": "Request Id"
+          },
+          "source_mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "import",
+                  "youtube"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Mode"
+          },
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Ids",
+            "default": []
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "goal",
+          "request_id"
+        ],
+        "title": "SavedLearningRequest"
+      },
+      "Scene": {
+        "properties": {
+          "template": {
+            "type": "string",
+            "enum": [
+              "process",
+              "comparison",
+              "example",
+              "timeline",
+              "chart"
+            ],
+            "title": "Template"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/DiagramNode"
+            },
+            "type": "array",
+            "title": "Nodes"
+          },
+          "connections": {
+            "items": {
+              "$ref": "#/components/schemas/Connection"
+            },
+            "type": "array",
+            "title": "Connections"
+          },
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/SceneAction"
+            },
+            "type": "array",
+            "title": "Actions"
+          },
+          "start_ms": {
+            "type": "integer",
+            "title": "Start Ms",
+            "default": 0
+          },
+          "end_ms": {
+            "type": "integer",
+            "maximum": 40000.0,
+            "minimum": 1.0,
+            "title": "End Ms"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "template",
+          "nodes",
+          "connections",
+          "actions",
+          "end_ms"
+        ],
+        "title": "Scene"
+      },
+      "SceneAction": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "appear",
+              "disappear",
+              "highlight",
+              "move",
+              "draw"
+            ],
+            "title": "Kind"
+          },
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "at_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "At Ms"
+          },
+          "to_slot": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Slot"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "target",
+          "at_ms"
+        ],
+        "title": "SceneAction"
+      },
+      "SearchItem": {
+        "properties": {
+          "video_id": {
+            "type": "string",
+            "title": "Video Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "channel": {
+            "type": "string",
+            "title": "Channel"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "transcript_status": {
+            "type": "string",
+            "const": "needed",
+            "title": "Transcript Status",
+            "default": "needed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "video_id",
+          "title",
+          "channel",
+          "url"
+        ],
+        "title": "SearchItem"
+      },
+      "SearchResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/SearchItem"
+            },
+            "type": "array",
+            "title": "Results"
+          },
+          "cached": {
+            "type": "boolean",
+            "title": "Cached"
+          },
+          "acquisition": {
+            "type": "string",
+            "const": "assisted",
+            "title": "Acquisition",
+            "default": "assisted"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "results",
+          "cached"
+        ],
+        "title": "SearchResponse"
+      },
+      "Short": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "objective": {
+            "type": "string",
+            "title": "Objective"
+          },
+          "prerequisites": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Prerequisites",
+            "default": []
+          },
+          "narration_units": {
+            "items": {
+              "$ref": "#/components/schemas/NarrationUnit"
+            },
+            "type": "array",
+            "title": "Narration Units",
+            "default": []
+          },
+          "evidence_references": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "type": "array",
+            "title": "Evidence References",
+            "default": []
+          },
+          "scenes": {
+            "items": {
+              "$ref": "#/components/schemas/Scene"
+            },
+            "type": "array",
+            "title": "Scenes",
+            "default": []
+          },
+          "question": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Question"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "audio_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Path"
+          },
+          "measured_duration_ms": {
+            "type": "integer",
+            "title": "Measured Duration Ms",
+            "default": 0
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "generating",
+              "validating",
+              "synthesizing",
+              "ready",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "default": "queued"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "optional": {
+            "type": "boolean",
+            "title": "Optional",
+            "default": false
+          },
+          "question_required": {
+            "type": "boolean",
+            "title": "Question Required",
+            "default": false
+          },
+          "cache_hit": {
+            "type": "boolean",
+            "title": "Cache Hit",
+            "default": false
+          },
+          "provider_settings": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Provider Settings",
+            "default": {}
+          },
+          "timings": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Timings",
+            "default": {}
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "objective"
+        ],
+        "title": "Short"
+      },
+      "Source": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "original_sample",
+              "import",
+              "youtube"
+            ],
+            "title": "Source Type"
+          },
+          "video_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Id"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "channel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel"
+          },
+          "transcript_provider": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "youtube-transcript-api"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript Provider"
+          },
+          "transcript_status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "needed"
+            ],
+            "title": "Transcript Status"
+          },
+          "provenance": {
+            "type": "string",
+            "title": "Provenance"
+          },
+          "content_hash": {
+            "type": "string",
+            "title": "Content Hash"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/components/schemas/TranscriptSegment"
+            },
+            "type": "array",
+            "title": "Segments",
+            "default": []
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "source_type",
+          "transcript_status",
+          "provenance",
+          "content_hash"
+        ],
+        "title": "Source"
+      },
+      "SourceList": {
+        "properties": {
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/Source"
+            },
+            "type": "array",
+            "title": "Sources"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "sources"
+        ],
+        "title": "SourceList"
+      },
+      "TranscriptSegment": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 1800,
+            "minLength": 1,
+            "title": "Text"
+          },
+          "start_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Ms"
+          },
+          "end_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Ms"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "source_id",
+          "text"
+        ],
+        "title": "TranscriptSegment"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

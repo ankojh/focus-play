@@ -1,0 +1,160 @@
+{
+  "health": {
+    "ready": true,
+    "model_ready": true,
+    "speech_ready": true,
+    "model": "qwen3:8b",
+    "digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41",
+    "speech_provider": "kokoro",
+    "voice": "af_heart",
+    "message": "Local providers are ready."
+  },
+  "runs": [
+    {
+      "kind": "cold",
+      "lesson_id": "lesson_2ec3b18da5754c718f3f",
+      "accepted_seconds": 0.0012202499201521277,
+      "terminal_seconds": 50.339980125427246,
+      "import_seconds": 0.001829290995374322,
+      "status": "failed",
+      "metrics": {
+        "source_acquisition_seconds": 2.986698166001588,
+        "planning_seconds": 4.491770999971777,
+        "plan_cache_hit": 0.0,
+        "first_playable_seconds": 19.311496019363403
+      },
+      "stage_timings": {
+        "generation_seconds": 6.964864874957129,
+        "validation_seconds": 3.4025106669869274,
+        "speech_seconds": 1.4642098330659792
+      },
+      "settings": {
+        "model": "qwen3:8b",
+        "digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41",
+        "context": 8192,
+        "num_predict": 2200,
+        "temperature": 0,
+        "seed": 42,
+        "think": false,
+        "prompt_version": "8",
+        "schema_version": "1",
+        "quantization": "Q4_K_M",
+        "speech": {
+          "provider": "kokoro",
+          "voice": "af_heart",
+          "speed": 1,
+          "sample_rate": 24000,
+          "model_revision": "f3ff3571791e39611d31c381e3a41a3af07b4987",
+          "voice_sha256": "0ab5709b8ffab19bfd849cd11d98f75b60af7733253ad0d67b12382a102cb4ff"
+        },
+        "language": "en"
+      },
+      "shorts": [
+        {
+          "template": "comparison",
+          "status": "ready",
+          "duration_ms": 16025,
+          "cache_hit": false,
+          "timings": {
+            "generation_seconds": 6.964864874957129,
+            "validation_seconds": 3.4025106669869274,
+            "speech_seconds": 1.4642098330659792,
+            "ready_after_seconds": 19.311496019363403
+          }
+        },
+        {
+          "template": null,
+          "status": "failed",
+          "duration_ms": 0,
+          "cache_hit": false,
+          "timings": {}
+        },
+        {
+          "template": null,
+          "status": "queued",
+          "duration_ms": 0,
+          "cache_hit": false,
+          "timings": {}
+        }
+      ],
+      "error": {
+        "code": "MODEL_DATA_INVALID",
+        "message": "The model returned invalid or unsupported lesson data after two repairs. Try a more focused goal or another local model."
+      },
+      "planned_duration_ms": 116025
+    },
+    {
+      "kind": "cached",
+      "lesson_id": "lesson_d9705e3eb0474253ae5e",
+      "accepted_seconds": 0.002996707917191088,
+      "terminal_seconds": 31.014258861541748,
+      "import_seconds": 3.7497375160455704e-07,
+      "status": "failed",
+      "metrics": {
+        "source_acquisition_seconds": 0.010656583006493747,
+        "planning_seconds": 0.00015529198572039604,
+        "plan_cache_hit": 1.0,
+        "first_playable_seconds": 0.012829780578613281
+      },
+      "stage_timings": {
+        "generation_seconds": 7.879198528826237e-05,
+        "validation_seconds": 1.25030055642128e-07,
+        "speech_seconds": 0.0003357080277055502
+      },
+      "settings": {
+        "model": "qwen3:8b",
+        "digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41",
+        "context": 8192,
+        "num_predict": 2200,
+        "temperature": 0,
+        "seed": 42,
+        "think": false,
+        "prompt_version": "8",
+        "schema_version": "1",
+        "quantization": "Q4_K_M",
+        "speech": {
+          "provider": "kokoro",
+          "voice": "af_heart",
+          "speed": 1,
+          "sample_rate": 24000,
+          "model_revision": "f3ff3571791e39611d31c381e3a41a3af07b4987",
+          "voice_sha256": "0ab5709b8ffab19bfd849cd11d98f75b60af7733253ad0d67b12382a102cb4ff"
+        },
+        "language": "en"
+      },
+      "shorts": [
+        {
+          "template": "comparison",
+          "status": "ready",
+          "duration_ms": 16025,
+          "cache_hit": true,
+          "timings": {
+            "generation_seconds": 7.879198528826237e-05,
+            "validation_seconds": 1.25030055642128e-07,
+            "speech_seconds": 0.0003357080277055502,
+            "ready_after_seconds": 0.012829780578613281
+          }
+        },
+        {
+          "template": null,
+          "status": "failed",
+          "duration_ms": 0,
+          "cache_hit": false,
+          "timings": {}
+        },
+        {
+          "template": null,
+          "status": "queued",
+          "duration_ms": 0,
+          "cache_hit": false,
+          "timings": {}
+        }
+      ],
+      "error": {
+        "code": "MODEL_DATA_INVALID",
+        "message": "The model returned invalid or unsupported lesson data after two repairs. Try a more focused goal or another local model."
+      },
+      "planned_duration_ms": 116025
+    }
+  ]
+}

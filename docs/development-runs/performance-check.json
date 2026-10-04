@@ -1,0 +1,140 @@
+{
+  "health": {
+    "ready": true,
+    "model_ready": true,
+    "speech_ready": true,
+    "model": "qwen3:8b",
+    "digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41",
+    "speech_provider": "kokoro",
+    "voice": "af_heart",
+    "message": "Local providers are ready."
+  },
+  "runs": [
+    {
+      "kind": "cold",
+      "lesson_id": "lesson_dce4d49988904e9ba986",
+      "accepted_seconds": 0.0011969999177381396,
+      "terminal_seconds": 40.15964412689209,
+      "import_seconds": 0.0019396659918129444,
+      "status": "failed",
+      "metrics": {
+        "source_acquisition_seconds": 2.9434252919163555,
+        "planning_seconds": 4.0835408749990165,
+        "plan_cache_hit": 0.0
+      },
+      "stage_timings": {},
+      "settings": {
+        "model": "qwen3:8b",
+        "digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41",
+        "context": 8192,
+        "num_predict": 2200,
+        "temperature": 0,
+        "seed": 42,
+        "think": false,
+        "prompt_version": "7",
+        "schema_version": "1",
+        "quantization": "Q4_K_M",
+        "speech": {
+          "provider": "kokoro",
+          "voice": "af_heart",
+          "speed": 1,
+          "sample_rate": 24000,
+          "model_revision": "f3ff3571791e39611d31c381e3a41a3af07b4987",
+          "voice_sha256": "0ab5709b8ffab19bfd849cd11d98f75b60af7733253ad0d67b12382a102cb4ff"
+        },
+        "language": "en"
+      },
+      "shorts": [
+        {
+          "template": null,
+          "status": "failed",
+          "duration_ms": 0,
+          "cache_hit": false,
+          "timings": {}
+        },
+        {
+          "template": null,
+          "status": "queued",
+          "duration_ms": 0,
+          "cache_hit": false,
+          "timings": {}
+        },
+        {
+          "template": null,
+          "status": "queued",
+          "duration_ms": 0,
+          "cache_hit": false,
+          "timings": {}
+        }
+      ],
+      "error": {
+        "code": "MODEL_DATA_INVALID",
+        "message": "The model returned invalid or unsupported lesson data after two repairs. Try a more focused goal or another local model."
+      },
+      "planned_duration_ms": 140000
+    },
+    {
+      "kind": "cached",
+      "lesson_id": "lesson_0a575f0f4ec44478abb8",
+      "accepted_seconds": 0.002659208024851978,
+      "terminal_seconds": 32.454323053359985,
+      "import_seconds": 6.249174475669861e-07,
+      "status": "failed",
+      "metrics": {
+        "source_acquisition_seconds": 0.013205750030465424,
+        "planning_seconds": 0.00018241710495203733,
+        "plan_cache_hit": 1.0
+      },
+      "stage_timings": {},
+      "settings": {
+        "model": "qwen3:8b",
+        "digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41",
+        "context": 8192,
+        "num_predict": 2200,
+        "temperature": 0,
+        "seed": 42,
+        "think": false,
+        "prompt_version": "7",
+        "schema_version": "1",
+        "quantization": "Q4_K_M",
+        "speech": {
+          "provider": "kokoro",
+          "voice": "af_heart",
+          "speed": 1,
+          "sample_rate": 24000,
+          "model_revision": "f3ff3571791e39611d31c381e3a41a3af07b4987",
+          "voice_sha256": "0ab5709b8ffab19bfd849cd11d98f75b60af7733253ad0d67b12382a102cb4ff"
+        },
+        "language": "en"
+      },
+      "shorts": [
+        {
+          "template": null,
+          "status": "failed",
+          "duration_ms": 0,
+          "cache_hit": false,
+          "timings": {}
+        },
+        {
+          "template": null,
+          "status": "queued",
+          "duration_ms": 0,
+          "cache_hit": false,
+          "timings": {}
+        },
+        {
+          "template": null,
+          "status": "queued",
+          "duration_ms": 0,
+          "cache_hit": false,
+          "timings": {}
+        }
+      ],
+      "error": {
+        "code": "MODEL_DATA_INVALID",
+        "message": "The model returned invalid or unsupported lesson data after two repairs. Try a more focused goal or another local model."
+      },
+      "planned_duration_ms": 140000
+    }
+  ]
+}

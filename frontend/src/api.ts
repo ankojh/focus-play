@@ -1,0 +1,16 @@
+import type { components } from './api.generated';
+export type Lesson = components['schemas']['Lesson'];
+export type Short = components['schemas']['Short'];
+export type Source = components['schemas']['Source'];
+export type Scene = components['schemas']['Scene'];
+export type Health = components['schemas']['ProviderHealth'];
+export type SearchResult = components['schemas']['SearchItem'];
+export type Evidence = components['schemas']['EvidenceRef'];
+export class ApiError extends Error { constructor(public code: string, message: string) { super(message); } }
+export async function api<T>(url: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+  const response = await fetch('/api' + url, { method: body === undefined ? 'GET' : 'POST', headers: body === undefined ? undefined : {'Content-Type':'application/json'}, body: body === undefined ? undefined : JSON.stringify(body), signal });
+  if (!response.ok) { const error = await response.json().catch(() => ({code:'NETWORK_FAILED',message:'The server request failed. Check the local server, then retry.'})); throw new ApiError(error.code, error.message); }
+  return response.json();
+}
+export function duration(ms: number) { const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2,'0')}`; }
+export function restore<T>(key: string, fallback: T): T { try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback; } catch { return fallback; } }

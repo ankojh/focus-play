@@ -1,0 +1,16 @@
+{
+  "status": "passed",
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "lesson_id": "lesson_c8996fbce65943faad29",
+  "frames": 179,
+  "median_frame_gap_ms": 16.699999999999818,
+  "max_frame_gap_ms": 16.800000000000182,
+  "audioMs": 9900,
+  "sliderMs": 9900,
+  "scrollWidth": 390,
+  "external_browser_requests": "blocked during this check",
+  "note": "Headless Chromium after preparation; this is not a peak-load profile."
+}

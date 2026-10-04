@@ -1,0 +1,13 @@
+Original sample written for Focus Play. This is teaching material, not a transcript from a video. It describes general relational database concepts. Exact query planner behaviour varies by database and version.
+
+A database table stores rows. A query can ask for rows with a particular value. Without a useful index, the database can read many rows and test the condition on each row. This process is called a table scan. A table scan can be a good choice for a small table or for a query that needs most of its rows.
+
+An index is a separate data structure that maps indexed column values to locations of matching rows. Many relational databases support B-tree indexes. A B-tree keeps keys in order and uses a tree structure. A lookup follows the tree to find a key or key range, then uses the matching entries to find rows. The database query planner chooses whether to use an index. An index does not guarantee that every query will use it.
+
+Consider a users table with columns id, email, and name. A query asks for a user whose email is ada@example.test. An index on email can help the database find matching entries without testing the email in every row. Without a useful index, the database may scan rows and compare each email. This example shows the relationship between a search value, an index entry, and a table row. It does not state the number of disk reads or a measured speed improvement.
+
+Indexes can reduce the work needed for selective reads, but they also take storage space. When indexed data changes, the database must update the index. This work can add cost to inserts, updates, and deletes. Adding an index to every column is not a useful general rule. Choose indexes for the queries and data in the actual application. Compare the read benefit with storage and write costs.
+
+A composite index has keys from more than one column. Column order can matter. An index on last_name followed by first_name can support a search on last_name in many B-tree implementations. A search on first_name alone may not receive the same benefit. Exact behaviour depends on the database, its version, the index type, and the query. Read the database documentation before using this rule for a specific system.
+
+Use a query plan to see how the database intends to find rows. Many databases provide an EXPLAIN command, but the output and options differ. A useful test process is to identify an important query, examine its plan, add a suitable index in a test environment, and compare the plan and measured runtime. Keep the data and conditions comparable. An index should be evaluated with evidence from the actual workload.

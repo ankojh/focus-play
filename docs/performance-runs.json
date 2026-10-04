@@ -1,0 +1,602 @@
+{
+  "health": {
+    "ready": true,
+    "model_ready": true,
+    "speech_ready": true,
+    "model": "qwen3:8b",
+    "digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41",
+    "speech_provider": "kokoro",
+    "voice": "af_heart",
+    "message": "Local providers are ready."
+  },
+  "runs": [
+    {
+      "kind": "cold",
+      "lesson_id": "lesson_aff8d2ddbc4844a6845b",
+      "accepted_seconds": 0.0012815829832106829,
+      "terminal_seconds": 52.38847899436951,
+      "import_seconds": 0.002013875055126846,
+      "status": "complete",
+      "metrics": {
+        "provider_load_seconds": 2.738757541985251,
+        "source_acquisition_seconds": 0.00011245801579207182,
+        "planning_seconds": 5.743964959052391,
+        "plan_cache_hit": 0.0,
+        "first_playable_seconds": 21.851840019226074,
+        "waiting_before_short_2_seconds": 0.0,
+        "waiting_before_short_3_seconds": 0.0,
+        "total_preparation_seconds": 52.38847732543945
+      },
+      "stage_timings": {
+        "generation_seconds": 31.04693650000263,
+        "validation_seconds": 8.791020541801117,
+        "speech_seconds": 4.052019000053406
+      },
+      "settings": {
+        "model": "qwen3:8b",
+        "digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41",
+        "context": 8192,
+        "num_predict": 2200,
+        "temperature": 0,
+        "seed": 42,
+        "think": false,
+        "prompt_version": "13",
+        "schema_version": "1",
+        "quantization": "Q4_K_M",
+        "speech": {
+          "provider": "kokoro",
+          "voice": "af_heart",
+          "speed": 1,
+          "sample_rate": 24000,
+          "model_revision": "f3ff3571791e39611d31c381e3a41a3af07b4987",
+          "voice_sha256": "0ab5709b8ffab19bfd849cd11d98f75b60af7733253ad0d67b12382a102cb4ff"
+        },
+        "language": "en"
+      },
+      "shorts": [
+        {
+          "template": "comparison",
+          "status": "ready",
+          "duration_ms": 15775,
+          "cache_hit": false,
+          "timings": {
+            "generation_seconds": 9.24266141699627,
+            "validation_seconds": 2.802881166920997,
+            "speech_seconds": 1.3211339160334319,
+            "ready_after_seconds": 21.851840019226074
+          }
+        },
+        {
+          "template": "example",
+          "status": "ready",
+          "duration_ms": 17625,
+          "cache_hit": false,
+          "timings": {
+            "generation_seconds": 9.470357957994565,
+            "validation_seconds": 2.702142374939285,
+            "speech_seconds": 1.407024292042479,
+            "ready_after_seconds": 35.43784213066101
+          }
+        },
+        {
+          "template": "example",
+          "status": "ready",
+          "duration_ms": 15625,
+          "cache_hit": false,
+          "timings": {
+            "generation_seconds": 12.333917125011794,
+            "validation_seconds": 3.285996999940835,
+            "speech_seconds": 1.323860791977495,
+            "ready_after_seconds": 52.38817620277405
+          }
+        }
+      ],
+      "error": null,
+      "planned_duration_ms": 69025
+    },
+    {
+      "kind": "warm_uncached",
+      "lesson_id": "lesson_a9f1dfe2d03e4f0087ef",
+      "accepted_seconds": 0.0010599580127745867,
+      "terminal_seconds": 48.690613985061646,
+      "import_seconds": 0.0014755420852452517,
+      "status": "complete",
+      "metrics": {
+        "provider_load_seconds": 0.005704666953533888,
+        "source_acquisition_seconds": 7.458403706550598e-05,
+        "planning_seconds": 4.23859404202085,
+        "plan_cache_hit": 0.0,
+        "first_playable_seconds": 17.671217918395996,
+        "waiting_before_short_2_seconds": 0.0,
+        "waiting_before_short_3_seconds": 0.0,
+        "total_preparation_seconds": 48.690611839294434
+      },
+      "stage_timings": {
+        "generation_seconds": 31.159065083018504,
+        "validation_seconds": 9.024791542091407,
+        "speech_seconds": 4.245871292077936
+      },
+      "settings": {
+        "model": "qwen3:8b",
+        "digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41",
+        "context": 8192,
+        "num_predict": 2200,
+        "temperature": 0,
+        "seed": 42,
+        "think": false,
+        "prompt_version": "13",
+        "schema_version": "1",
+        "quantization": "Q4_K_M",
+        "speech": {
+          "provider": "kokoro",
+          "voice": "af_heart",
+          "speed": 1,
+          "sample_rate": 24000,
+          "model_revision": "f3ff3571791e39611d31c381e3a41a3af07b4987",
+          "voice_sha256": "0ab5709b8ffab19bfd849cd11d98f75b60af7733253ad0d67b12382a102cb4ff"
+        },
+        "language": "en"
+      },
+      "shorts": [
+        {
+          "template": "comparison",
+          "status": "ready",
+          "duration_ms": 15775,
+          "cache_hit": false,
+          "timings": {
+            "generation_seconds": 9.23099691607058,
+            "validation_seconds": 2.797375583089888,
+            "speech_seconds": 1.396469417028129,
+            "ready_after_seconds": 17.671217918395996
+          }
+        },
+        {
+          "template": "example",
+          "status": "ready",
+          "duration_ms": 17625,
+          "cache_hit": false,
+          "timings": {
+            "generation_seconds": 9.54668266698718,
+            "validation_seconds": 2.8325542920501903,
+            "speech_seconds": 1.4848493330646306,
+            "ready_after_seconds": 31.54273772239685
+          }
+        },
+        {
+          "template": "example",
+          "status": "ready",
+          "duration_ms": 15625,
+          "cache_hit": false,
+          "timings": {
+            "generation_seconds": 12.381385499960743,
+            "validation_seconds": 3.3948616669513285,
+            "speech_seconds": 1.3645525419851765,
+            "ready_after_seconds": 48.6903657913208
+          }
+        }
+      ],
+      "error": null,
+      "planned_duration_ms": 69025
+    },
+    {
+      "kind": "warm_uncached",
+      "lesson_id": "lesson_c8b4f2bf22594279a3bc",
+      "accepted_seconds": 0.0010977910133078694,
+      "terminal_seconds": 49.27756714820862,
+      "import_seconds": 0.0014588329941034317,
+      "status": "complete",
+      "metrics": {
+        "provider_load_seconds": 0.005206041969358921,
+        "source_acquisition_seconds": 7.095804903656244e-05,
+        "planning_seconds": 4.160742000094615,
+        "plan_cache_hit": 0.0,
+        "first_playable_seconds": 17.46925711631775,
+        "waiting_before_short_2_seconds": 0.0,
+        "waiting_before_short_3_seconds": 0.0,
+        "total_preparation_seconds": 49.27756595611572
+      },
+      "stage_timings": {
+        "generation_seconds": 31.516807332984172,
+        "validation_seconds": 9.510502999997698,
+        "speech_seconds": 4.068631333997473
+      },
+      "settings": {
+        "model": "qwen3:8b",
+        "digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41",
+        "context": 8192,
+        "num_predict": 2200,
+        "temperature": 0,
+        "seed": 42,
+        "think": false,
+        "prompt_version": "13",
+        "schema_version": "1",
+        "quantization": "Q4_K_M",
+        "speech": {
+          "provider": "kokoro",
+          "voice": "af_heart",
+          "speed": 1,
+          "sample_rate": 24000,
+          "model_revision": "f3ff3571791e39611d31c381e3a41a3af07b4987",
+          "voice_sha256": "0ab5709b8ffab19bfd849cd11d98f75b60af7733253ad0d67b12382a102cb4ff"
+        },
+        "language": "en"
+      },
+      "shorts": [
+        {
+          "template": "comparison",
+          "status": "ready",
+          "duration_ms": 15775,
+          "cache_hit": false,
+          "timings": {
+            "generation_seconds": 9.085146291996352,
+            "validation_seconds": 2.8788860420463607,
+            "speech_seconds": 1.3373778749955818,
+            "ready_after_seconds": 17.46925711631775
+          }
+        },
+        {
+          "template": "example",
+          "status": "ready",
+          "duration_ms": 17600,
+          "cache_hit": false,
+          "timings": {
+            "generation_seconds": 9.799874332966283,
+            "validation_seconds": 3.0160314579261467,
+            "speech_seconds": 1.443559999926947,
+            "ready_after_seconds": 31.73552107810974
+          }
+        },
+        {
+          "template": "example",
+          "status": "ready",
+          "duration_ms": 15625,
+          "cache_hit": false,
+          "timings": {
+            "generation_seconds": 12.631786708021536,
+            "validation_seconds": 3.6155855000251904,
+            "speech_seconds": 1.2876934590749443,
+            "ready_after_seconds": 49.27730703353882
+          }
+        }
+      ],
+      "error": null,
+      "planned_duration_ms": 69000
+    },
+    {
+      "kind": "warm_uncached",
+      "lesson_id": "lesson_d6d3797e9697448094ba",
+      "accepted_seconds": 0.001135125057771802,
+      "terminal_seconds": 51.655738830566406,
+      "import_seconds": 0.0016285419696941972,
+      "status": "complete",
+      "metrics": {
+        "provider_load_seconds": 0.004849916091188788,
+        "source_acquisition_seconds": 6.862496957182884e-05,
+        "planning_seconds": 4.4903903340455145,
+        "plan_cache_hit": 0.0,
+        "first_playable_seconds": 18.43171262741089,
+        "waiting_before_short_2_seconds": 1.8069761276245124,
+        "waiting_before_short_3_seconds": 2.523751306533814,
+        "total_preparation_seconds": 51.65573787689209
+      },
+      "stage_timings": {
+        "generation_seconds": 32.93913291802164,
+        "validation_seconds": 10.348163040005602,
+        "speech_seconds": 3.856099624885246
+      },
+      "settings": {
+        "model": "qwen3:8b",
+        "digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41",
+        "context": 8192,
+        "num_predict": 2200,
+        "temperature": 0,
+        "seed": 42,
+        "think": false,
+        "prompt_version": "13",
+        "schema_version": "1",
+        "quantization": "Q4_K_M",
+        "speech": {
+          "provider": "kokoro",
+          "voice": "af_heart",
+          "speed": 1,
+          "sample_rate": 24000,
+          "model_revision": "f3ff3571791e39611d31c381e3a41a3af07b4987",
+          "voice_sha256": "0ab5709b8ffab19bfd849cd11d98f75b60af7733253ad0d67b12382a102cb4ff"
+        },
+        "language": "en"
+      },
+      "shorts": [
+        {
+          "template": "comparison",
+          "status": "ready",
+          "duration_ms": 13075,
+          "cache_hit": false,
+          "timings": {
+            "generation_seconds": 9.732569042011164,
+            "validation_seconds": 3.1232085410738364,
+            "speech_seconds": 1.0787617079913616,
+            "ready_after_seconds": 18.43171262741089
+          }
+        },
+        {
+          "template": "example",
+          "status": "ready",
+          "duration_ms": 17625,
+          "cache_hit": false,
+          "timings": {
+            "generation_seconds": 10.078688542009331,
+            "validation_seconds": 3.33199233293999,
+            "speech_seconds": 1.4647443339927122,
+            "ready_after_seconds": 33.3136887550354
+          }
+        },
+        {
+          "template": "example",
+          "status": "ready",
+          "duration_ms": 15625,
+          "cache_hit": false,
+          "timings": {
+            "generation_seconds": 13.127875334001146,
+            "validation_seconds": 3.8929621659917757,
+            "speech_seconds": 1.3125935829011723,
+            "ready_after_seconds": 51.6554639339447
+          }
+        }
+      ],
+      "error": null,
+      "planned_duration_ms": 66325
+    },
+    {
+      "kind": "warm_uncached",
+      "lesson_id": "lesson_6e5026b96911408abbc6",
+      "accepted_seconds": 0.0011537079699337482,
+      "terminal_seconds": 52.399643898010254,
+      "import_seconds": 0.0034362920559942722,
+      "status": "complete",
+      "metrics": {
+        "provider_load_seconds": 0.005983958952128887,
+        "source_acquisition_seconds": 7.570907473564148e-05,
+        "planning_seconds": 4.372653334052302,
+        "plan_cache_hit": 0.0,
+        "first_playable_seconds": 18.70654606819153,
+        "waiting_before_short_2_seconds": 0.0,
+        "waiting_before_short_3_seconds": 0.31783604621887207,
+        "total_preparation_seconds": 52.39964294433594
+      },
+      "stage_timings": {
+        "generation_seconds": 33.2563959590625,
+        "validation_seconds": 10.508834917098284,
+        "speech_seconds": 4.240362833021209
+      },
+      "settings": {
+        "model": "qwen3:8b",
+        "digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41",
+        "context": 8192,
+        "num_predict": 2200,
+        "temperature": 0,
+        "seed": 42,
+        "think": false,
+        "prompt_version": "13",
+        "schema_version": "1",
+        "quantization": "Q4_K_M",
+        "speech": {
+          "provider": "kokoro",
+          "voice": "af_heart",
+          "speed": 1,
+          "sample_rate": 24000,
+          "model_revision": "f3ff3571791e39611d31c381e3a41a3af07b4987",
+          "voice_sha256": "0ab5709b8ffab19bfd849cd11d98f75b60af7733253ad0d67b12382a102cb4ff"
+        },
+        "language": "en"
+      },
+      "shorts": [
+        {
+          "template": "comparison",
+          "status": "ready",
+          "duration_ms": 15775,
+          "cache_hit": false,
+          "timings": {
+            "generation_seconds": 9.835349541972391,
+            "validation_seconds": 3.1225143750198185,
+            "speech_seconds": 1.3681166670285165,
+            "ready_after_seconds": 18.70654606819153
+          }
+        },
+        {
+          "template": "example",
+          "status": "ready",
+          "duration_ms": 17600,
+          "cache_hit": false,
+          "timings": {
+            "generation_seconds": 10.262166875065304,
+            "validation_seconds": 3.636841042083688,
+            "speech_seconds": 1.5690945409005508,
+            "ready_after_seconds": 34.18134689331055
+          }
+        },
+        {
+          "template": "example",
+          "status": "ready",
+          "duration_ms": 15625,
+          "cache_hit": false,
+          "timings": {
+            "generation_seconds": 13.158879542024806,
+            "validation_seconds": 3.749479499994777,
+            "speech_seconds": 1.3031516250921413,
+            "ready_after_seconds": 52.3993821144104
+          }
+        }
+      ],
+      "error": null,
+      "planned_duration_ms": 69000
+    },
+    {
+      "kind": "warm_uncached",
+      "lesson_id": "lesson_ac2c33ec767d4b1bb38e",
+      "accepted_seconds": 0.00120749999769032,
+      "terminal_seconds": 51.58439493179321,
+      "import_seconds": 0.001575250062160194,
+      "status": "complete",
+      "metrics": {
+        "provider_load_seconds": 0.00563395896460861,
+        "source_acquisition_seconds": 7.558404467999935e-05,
+        "planning_seconds": 4.265541750006378,
+        "plan_cache_hit": 0.0,
+        "first_playable_seconds": 18.56709885597229,
+        "waiting_before_short_2_seconds": 0.0,
+        "waiting_before_short_3_seconds": 0.0,
+        "total_preparation_seconds": 51.58439493179321
+      },
+      "stage_timings": {
+        "generation_seconds": 32.48910087591503,
+        "validation_seconds": 10.68611820798833,
+        "speech_seconds": 4.12168566591572
+      },
+      "settings": {
+        "model": "qwen3:8b",
+        "digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41",
+        "context": 8192,
+        "num_predict": 2200,
+        "temperature": 0,
+        "seed": 42,
+        "think": false,
+        "prompt_version": "13",
+        "schema_version": "1",
+        "quantization": "Q4_K_M",
+        "speech": {
+          "provider": "kokoro",
+          "voice": "af_heart",
+          "speed": 1,
+          "sample_rate": 24000,
+          "model_revision": "f3ff3571791e39611d31c381e3a41a3af07b4987",
+          "voice_sha256": "0ab5709b8ffab19bfd849cd11d98f75b60af7733253ad0d67b12382a102cb4ff"
+        },
+        "language": "en"
+      },
+      "shorts": [
+        {
+          "template": "comparison",
+          "status": "ready",
+          "duration_ms": 15775,
+          "cache_hit": false,
+          "timings": {
+            "generation_seconds": 9.808023708988912,
+            "validation_seconds": 3.1699203749885783,
+            "speech_seconds": 1.316276332945563,
+            "ready_after_seconds": 18.56709885597229
+          }
+        },
+        {
+          "template": "example",
+          "status": "ready",
+          "duration_ms": 17600,
+          "cache_hit": false,
+          "timings": {
+            "generation_seconds": 9.960783791961148,
+            "validation_seconds": 3.6147077080095187,
+            "speech_seconds": 1.5027213749708608,
+            "ready_after_seconds": 33.652063846588135
+          }
+        },
+        {
+          "template": "example",
+          "status": "ready",
+          "duration_ms": 15625,
+          "cache_hit": false,
+          "timings": {
+            "generation_seconds": 12.720293374964967,
+            "validation_seconds": 3.9014901249902323,
+            "speech_seconds": 1.3026879579992965,
+            "ready_after_seconds": 51.5834538936615
+          }
+        }
+      ],
+      "error": null,
+      "planned_duration_ms": 69000
+    },
+    {
+      "kind": "cached",
+      "lesson_id": "lesson_db200c024cea41a6b2cc",
+      "accepted_seconds": 0.0017560420092195272,
+      "terminal_seconds": 0.02236795425415039,
+      "import_seconds": 1.6693957149982452e-07,
+      "status": "complete",
+      "metrics": {
+        "provider_load_seconds": 0.005263749975711107,
+        "source_acquisition_seconds": 7.391697727143764e-05,
+        "planning_seconds": 9.775010403245687e-05,
+        "plan_cache_hit": 1.0,
+        "first_playable_seconds": 0.00829005241394043,
+        "waiting_before_short_2_seconds": 0.0,
+        "waiting_before_short_3_seconds": 0.0,
+        "total_preparation_seconds": 0.022366762161254883
+      },
+      "stage_timings": {
+        "generation_seconds": 0.00024166691582649946,
+        "validation_seconds": 1.6798730939626694e-07,
+        "speech_seconds": 0.0005684170173481107
+      },
+      "settings": {
+        "model": "qwen3:8b",
+        "digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41",
+        "context": 8192,
+        "num_predict": 2200,
+        "temperature": 0,
+        "seed": 42,
+        "think": false,
+        "prompt_version": "13",
+        "schema_version": "1",
+        "quantization": "Q4_K_M",
+        "speech": {
+          "provider": "kokoro",
+          "voice": "af_heart",
+          "speed": 1,
+          "sample_rate": 24000,
+          "model_revision": "f3ff3571791e39611d31c381e3a41a3af07b4987",
+          "voice_sha256": "0ab5709b8ffab19bfd849cd11d98f75b60af7733253ad0d67b12382a102cb4ff"
+        },
+        "language": "en"
+      },
+      "shorts": [
+        {
+          "template": "comparison",
+          "status": "ready",
+          "duration_ms": 15775,
+          "cache_hit": true,
+          "timings": {
+            "generation_seconds": 8.058396633714437e-05,
+            "validation_seconds": 4.202593117952347e-08,
+            "speech_seconds": 0.00030266703106462955,
+            "ready_after_seconds": 0.00829005241394043
+          }
+        },
+        {
+          "template": "example",
+          "status": "ready",
+          "duration_ms": 17600,
+          "cache_hit": true,
+          "timings": {
+            "generation_seconds": 7.02079851180315e-05,
+            "validation_seconds": 8.405186235904694e-08,
+            "speech_seconds": 0.00012554205022752285,
+            "ready_after_seconds": 0.015140056610107422
+          }
+        },
+        {
+          "template": "example",
+          "status": "ready",
+          "duration_ms": 15625,
+          "cache_hit": true,
+          "timings": {
+            "generation_seconds": 9.087496437132359e-05,
+            "validation_seconds": 4.190951585769653e-08,
+            "speech_seconds": 0.00014020793605595827,
+            "ready_after_seconds": 0.022076845169067383
+          }
+        }
+      ],
+      "error": null,
+      "planned_duration_ms": 69000
+    }
+  ]
+}

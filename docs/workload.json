@@ -1,0 +1,36 @@
+{
+  "date": "2026-10-04",
+  "computer": "Apple M5 Pro",
+  "unified_memory_bytes": 51539607552,
+  "disk_bytes": {
+    ".data": 5612826624,
+    ".venv": 1001553920,
+    ".runtime": 698597376,
+    "frontend/node_modules": 151289856
+  },
+  "ollama_loaded_models": {
+    "models": [
+      {
+        "name": "qwen3:8b",
+        "model": "qwen3:8b",
+        "size": 6628719984,
+        "digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41",
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen3",
+          "families": [
+            "qwen3"
+          ],
+          "parameter_size": "8.2B",
+          "quantization_level": "Q4_K_M"
+        },
+        "expires_at": "2026-10-04T15:19:49.295938+05:30",
+        "size_vram": 6628719984,
+        "context_length": 8192
+      }
+    ]
+  },
+  "api_process_sample": "  PID    RSS  %CPU COMM\n57579 852512   0.0 .venv/bin/python\n",
+  "note": "Snapshot after lesson preparation. RSS is in KiB. This is not peak memory or an energy measure."
+}

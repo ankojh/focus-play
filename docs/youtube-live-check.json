@@ -1,0 +1,21 @@
+{
+  "search_key_configured": false,
+  "provider": "youtube-transcript-api 1.2.4",
+  "video_id": "RufupUDBtYY",
+  "scope": "Direct public caption check. This is not a live goal-to-lesson search check.",
+  "status": "passed",
+  "source_id": "src_bdc66ef9227678c6c20c",
+  "passages": 70,
+  "url": "https://www.youtube.com/watch?v=RufupUDBtYY",
+  "channel": "LearnThatStack",
+  "first_start_ms": 320,
+  "last_end_ms": 1118160,
+  "seconds": 1.498,
+  "full_goal_to_playback": "blocked",
+  "dependency": "YOUTUBE_API_KEY for enabled YouTube Data API v3",
+  "missing_key_lesson_id": "lesson_6bf5d79e894e444da462",
+  "missing_key_error": "YOUTUBE_KEY_MISSING",
+  "retry_accepted": 202,
+  "legacy_sources_unchanged": 38,
+  "saved_lessons_unchanged": 47
+}

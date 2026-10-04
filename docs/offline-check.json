@@ -1,0 +1,171 @@
+{
+  "status": "passed",
+  "seconds": 16.958353666006587,
+  "duration_ms": 17300,
+  "model": {
+    "model": "qwen3:8b",
+    "digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41",
+    "context": 8192,
+    "num_predict": 2200,
+    "temperature": 0,
+    "seed": 42,
+    "think": false,
+    "prompt_version": "13",
+    "schema_version": "1",
+    "quantization": "Q4_K_M"
+  },
+  "speech": {
+    "provider": "kokoro",
+    "voice": "af_heart",
+    "speed": 1,
+    "sample_rate": 24000,
+    "model_revision": "f3ff3571791e39611d31c381e3a41a3af07b4987",
+    "voice_sha256": "0ab5709b8ffab19bfd849cd11d98f75b60af7733253ad0d67b12382a102cb4ff"
+  },
+  "audio_path": "ecd434e2fdddafce753117dd0cb5e8d64f4e4dad06a352393c36584e57eda7c4.wav",
+  "blocked_network_attempts": [],
+  "offline_boundary": "Python external socket connections blocked. Ollama uses loopback with OLLAMA_NO_CLOUD=1.",
+  "draft": {
+    "objective": "Understand a B-tree index lookup",
+    "prerequisites": [],
+    "narration_units": [
+      {
+        "text": "A B-tree keeps keys in order and uses a tree structure. A lookup follows the tree to find a key or key range, then uses the matching entries to find rows.",
+        "evidence": {
+          "source_id": "src_9b4cfc08c4ebd6be8b9c",
+          "segment_ids": [
+            "src_9b4cfc08c4ebd6be8b9c_2"
+          ],
+          "start_ms": null,
+          "end_ms": null,
+          "quote": "An index is a separate data structure that maps indexed column values to locations of matching rows. Many relational databases support B-tree indexes. A B-tree keeps keys in order and uses a tree structure. A lookup follows the tree to find a key or key range, then uses the matching entries to find rows. The database query planner chooses whether to use an index. An index does not guarantee that every query will use it."
+        },
+        "start_ms": 0,
+        "end_ms": 10375
+      },
+      {
+        "text": "An index on email can help the database find matching entries without testing the email in every row.",
+        "evidence": {
+          "source_id": "src_9b4cfc08c4ebd6be8b9c",
+          "segment_ids": [
+            "src_9b4cfc08c4ebd6be8b9c_3"
+          ],
+          "start_ms": null,
+          "end_ms": null,
+          "quote": "Consider a users table with columns id, email, and name. A query asks for a user whose email is ada@example.test. An index on email can help the database find matching entries without testing the email in every row. Without a useful index, the database may scan rows and compare each email. This example shows the relationship between a search value, an index entry, and a table row. It does not state the number of disk reads or a measured speed improvement."
+        },
+        "start_ms": 10375,
+        "end_ms": 17300
+      }
+    ],
+    "template": "process",
+    "nodes": [
+      {
+        "id": "node_0",
+        "label": "B-tree structure",
+        "detail": "",
+        "slot": 0,
+        "shape": "box",
+        "value": null
+      },
+      {
+        "id": "node_1",
+        "label": "Key lookup",
+        "detail": "",
+        "slot": 1,
+        "shape": "box",
+        "value": null
+      },
+      {
+        "id": "node_2",
+        "label": "Matching entries",
+        "detail": "",
+        "slot": 2,
+        "shape": "box",
+        "value": null
+      },
+      {
+        "id": "node_3",
+        "label": "Row retrieval",
+        "detail": "",
+        "slot": 3,
+        "shape": "box",
+        "value": null
+      }
+    ],
+    "connections": [
+      {
+        "id": "conn_0",
+        "source": "node_0",
+        "target": "node_1"
+      },
+      {
+        "id": "conn_1",
+        "source": "node_1",
+        "target": "node_2"
+      },
+      {
+        "id": "conn_2",
+        "source": "node_2",
+        "target": "node_3"
+      }
+    ],
+    "actions": [
+      {
+        "kind": "appear",
+        "target": "node_0",
+        "unit": 0,
+        "to_slot": null
+      },
+      {
+        "kind": "appear",
+        "target": "node_1",
+        "unit": 0,
+        "to_slot": null
+      },
+      {
+        "kind": "appear",
+        "target": "node_2",
+        "unit": 0,
+        "to_slot": null
+      },
+      {
+        "kind": "appear",
+        "target": "node_3",
+        "unit": 0,
+        "to_slot": null
+      },
+      {
+        "kind": "highlight",
+        "target": "node_0",
+        "unit": 0,
+        "to_slot": null
+      },
+      {
+        "kind": "draw",
+        "target": "conn_0",
+        "unit": 0,
+        "to_slot": null
+      },
+      {
+        "kind": "draw",
+        "target": "conn_1",
+        "unit": 1,
+        "to_slot": null
+      },
+      {
+        "kind": "draw",
+        "target": "conn_2",
+        "unit": 1,
+        "to_slot": null
+      },
+      {
+        "kind": "highlight",
+        "target": "node_3",
+        "unit": 1,
+        "to_slot": null
+      }
+    ],
+    "question": null
+  }
+}

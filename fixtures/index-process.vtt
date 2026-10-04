@@ -1,0 +1,10 @@
+WEBVTT
+
+00:00.000 --> 00:12.000
+A query supplies a search value. A B-tree index keeps keys in order and uses a tree to find a key or key range.
+
+00:12.000 --> 00:24.000
+The matching index entry points to a table row. The query planner chooses whether to use the index. A small table can still use a table scan.
+
+00:24.000 --> 00:38.000
+An index takes storage space. A change to indexed data must also update the index. Evaluate read benefits and write costs with the actual workload.
