@@ -567,6 +567,54 @@
         ],
         "title": "DiagramNode"
       },
+      "DiagramState": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,19}$",
+            "title": "Id"
+          },
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 44,
+            "minLength": 1,
+            "title": "Label"
+          },
+          "detail": {
+            "type": "string",
+            "maxLength": 70,
+            "minLength": 3,
+            "title": "Detail"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "neutral",
+              "start",
+              "step",
+              "result",
+              "warning",
+              "good",
+              "bad"
+            ],
+            "title": "Role",
+            "default": "neutral"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "target",
+          "label",
+          "detail"
+        ],
+        "title": "DiagramState"
+      },
       "ErrorInfo": {
         "properties": {
           "code": {
@@ -912,6 +960,39 @@
           "evidence": {
             "$ref": "#/components/schemas/EvidenceRef"
           },
+          "beat_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Beat Id"
+          },
+          "scene_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scene Id"
+          },
+          "purpose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purpose"
+          },
           "start_ms": {
             "type": "integer",
             "title": "Start Ms",
@@ -1157,6 +1238,54 @@
       },
       "Scene": {
         "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "const": "diagram",
+            "title": "Kind",
+            "default": "diagram"
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 240,
+            "title": "Summary",
+            "default": ""
+          },
+          "evidence_references": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "type": "array",
+            "title": "Evidence References",
+            "default": []
+          },
+          "beat_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Beat Ids",
+            "default": []
+          },
+          "states": {
+            "items": {
+              "$ref": "#/components/schemas/DiagramState"
+            },
+            "type": "array",
+            "maxItems": 12,
+            "title": "States",
+            "default": []
+          },
           "template": {
             "type": "string",
             "enum": [
@@ -1195,6 +1324,8 @@
           },
           "start_ms": {
             "type": "integer",
+            "maximum": 39999.0,
+            "minimum": 0.0,
             "title": "Start Ms",
             "default": 0
           },
@@ -1225,7 +1356,8 @@
               "disappear",
               "highlight",
               "move",
-              "draw"
+              "draw",
+              "change_state"
             ],
             "title": "Kind"
           },
@@ -1241,13 +1373,37 @@
           "to_slot": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "maximum": 3.0,
+                "minimum": 0.0
               },
               {
                 "type": "null"
               }
             ],
             "title": "To Slot"
+          },
+          "state_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State Id"
+          },
+          "beat_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Beat Id"
           }
         },
         "additionalProperties": false,
@@ -1335,6 +1491,26 @@
       },
       "Short": {
         "properties": {
+          "storyboard_version": {
+            "type": "integer",
+            "enum": [
+              1,
+              2
+            ],
+            "title": "Storyboard Version",
+            "default": 1
+          },
+          "timeline_compiler_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeline Compiler Version"
+          },
           "id": {
             "type": "string",
             "title": "Id"

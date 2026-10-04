@@ -9,10 +9,11 @@ test('real YouTube lesson: incremental playback, refresh, source links and time 
   await page.getByLabel('What do you already know?').selectOption('custom');await page.getByLabel('Describe current knowledge').fill('I know basic SQL SELECT queries.');
   const created=page.waitForResponse(r=>r.url().endsWith('/api/lessons') && r.request().method()==='POST');
   await page.getByRole('button',{name:'Create my lesson'}).click();const response=await created;expect(response.status()).toBe(202);const accepted=await response.json();const lid=accepted.id;
-  await expect(page.getByRole('button',{name:'Play',exact:true})).toBeVisible({timeout:150000});
+  await expect(page.locator('.player')).toBeVisible({timeout:150000});
+  await expect.poll(()=>page.locator('audio').evaluate((a:HTMLAudioElement)=>a.readyState)).toBeGreaterThanOrEqual(1);
   const first=await(await request.get(`/api/lessons/${lid}`)).json();expect(first.shorts[0].status).toBe('ready');
   if(first.shorts.length>1&&!first.shorts[0].cache_hit)expect(first.shorts.slice(1).some((s:any)=>s.status!=='ready')).toBe(true);
-  await page.getByRole('button',{name:'Play',exact:true}).click();await expect.poll(()=>page.locator('audio').evaluate((a:HTMLAudioElement)=>a.currentTime)).toBeGreaterThan(.25);await page.getByRole('button',{name:'Pause',exact:true}).click();await page.getByLabel('Seek within short').fill('5000');
+  if(await page.locator('audio').evaluate((a:HTMLAudioElement)=>a.paused))await page.getByRole('button',{name:'Play',exact:true}).click();await expect.poll(()=>page.locator('audio').evaluate((a:HTMLAudioElement)=>a.currentTime)).toBeGreaterThan(.25);await page.getByRole('button',{name:'Pause',exact:true}).click();await page.getByLabel('Seek within short').fill('5000');
   await expect.poll(()=>page.locator('audio').evaluate((a:HTMLAudioElement)=>a.currentTime)).toBeCloseTo(5,0);await page.reload();await expect(page.getByRole('button',{name:'Play',exact:true})).toBeVisible();await expect.poll(()=>page.locator('audio').evaluate((a:HTMLAudioElement)=>a.currentTime)).toBeCloseTo(5,0);
   await expect.poll(async()=>{const r=await request.get(`/api/lessons/${lid}`);return (await r.json()).job.status;},{timeout:150000,intervals:[1000]}).toBe('complete');
   const final=await(await request.get(`/api/lessons/${lid}`)).json();expect(final.planned_duration_ms).toBeLessThanOrEqual(300000);expect(final.shorts.every((s:any)=>s.audio_path && s.evidence_references.length)).toBe(true);

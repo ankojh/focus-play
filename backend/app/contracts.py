@@ -65,6 +65,10 @@ class EvidenceRef(Contract):
 class NarrationUnit(Contract):
     text: str = Field(min_length=10, max_length=600)
     evidence: EvidenceRef
+    # Legacy narration has no beat binding; new playback persists these IDs.
+    beat_id: str | None = None
+    scene_id: str | None = None
+    purpose: str | None = None
     start_ms: int = 0
     end_ms: int = 0
 
@@ -148,22 +152,45 @@ class ShortDraft(Contract):
             raise ValueError(f"Narration has {words} words. Use 30 to 120, aiming for 40 to 80. Measured speech must fit 40 seconds.")
         return self
 
+class DiagramState(Contract):
+    id: str = Field(pattern=r"^[a-z][a-z0-9_]{0,19}$")
+    target: str
+    label: str = Field(min_length=1, max_length=44)
+    detail: str = Field(min_length=3, max_length=70)
+    role: Role = "neutral"
+
 class SceneAction(Contract):
-    kind: Literal["appear", "disappear", "highlight", "move", "draw"]
+    kind: Literal["appear", "disappear", "highlight", "move", "draw", "change_state"]
     target: str
     at_ms: int = Field(ge=0)
-    to_slot: int | None = None
+    to_slot: int | None = Field(default=None, ge=0, le=3)
+    state_id: str | None = None
+    beat_id: str | None = None
 
 class Scene(Contract):
+    # Version-1 saved scenes have no envelope metadata. All times are absolute.
+    id: str | None = None
+    kind: Literal["diagram"] = "diagram"
+    summary: str = Field(default="", max_length=240)
+    evidence_references: list[EvidenceRef] = []
+    beat_ids: list[str] = []
+    states: list[DiagramState] = Field(default=[], max_length=12)
     template: Template
     nodes: list[DiagramNode]
     connections: list[Connection]
     actions: list[SceneAction]
-    start_ms: int = 0
+    start_ms: int = Field(default=0, ge=0, le=39999)
     end_ms: int = Field(ge=1, le=40000)
+    @model_validator(mode="after")
+    def timeline(self):
+        from .storyboard import validate_scene
+        validate_scene(self)
+        return self
 
 ShortState = Literal["queued", "generating", "validating", "synthesizing", "ready", "failed", "cancelled"]
 class Short(Contract):
+    storyboard_version: Literal[1, 2] = 1
+    timeline_compiler_version: str | None = None
     id: str
     objective: str
     prerequisites: list[str] = []
@@ -180,6 +207,48 @@ class Short(Contract):
     cache_hit: bool = False
     provider_settings: dict = {}
     timings: dict[str, float] = {}
+    @model_validator(mode="after")
+    def playback(self):
+        if self.storyboard_version == 2 and self.status == "ready":
+            from .storyboard import validate_timeline
+            validate_timeline(self.scenes, self.narration_units, self.measured_duration_ms)
+            if not self.audio_path or not self.timeline_compiler_version:
+                raise ValueError("Ready storyboards require audio and a compiler version.")
+        return self
+
+class SemanticOperation(Contract):
+    kind: Literal["reveal", "hide", "focus", "connect", "move", "change_state"]
+    target: str
+    to_slot: int | None = Field(default=None, ge=0, le=3)
+    state_id: str | None = None
+
+class StoryboardScene(Contract):
+    id: str = Field(pattern=r"^[a-z][a-z0-9_]{0,19}$")
+    kind: Literal["diagram"] = "diagram"
+    summary: str = Field(min_length=5, max_length=240)
+    template: Template
+    nodes: list[DiagramNode] = Field(min_length=2, max_length=4)
+    connections: list[Connection] = Field(max_length=4)
+    states: list[DiagramState] = Field(max_length=12)
+
+class NarrationBeat(NarrationUnit):
+    beat_id: str = Field(pattern=r"^[a-z][a-z0-9_]{0,19}$")
+    scene_id: str
+    purpose: str = Field(min_length=5, max_length=120)
+    operations: list[SemanticOperation] = Field(min_length=1, max_length=8)
+
+class StoryboardDraft(Contract):
+    storyboard_version: Literal[2] = 2
+    objective: str = Field(min_length=5, max_length=150)
+    prerequisites: list[Annotated[str, Field(min_length=1, max_length=80)]] = Field(max_length=4)
+    narration_units: list[NarrationBeat] = Field(min_length=2, max_length=5)
+    scenes: list[StoryboardScene] = Field(min_length=1, max_length=3)
+    question: Question | None = None
+    @model_validator(mode="after")
+    def storyboard(self):
+        from .storyboard import validate_storyboard
+        validate_storyboard(self)
+        return self
 
 class Objective(Contract):
     title: str = Field(min_length=5, max_length=150)
@@ -277,6 +346,23 @@ class ModelQuestion(Contract):
     explanation: str = Field(min_length=10, max_length=300)
     segment_id: str
 
+class ModelBeat(Contract):
+    beat_id: str = Field(pattern=r"^[a-z][a-z0-9_]{0,19}$")
+    scene_id: str
+    purpose: str = Field(min_length=5, max_length=120)
+    text: str = Field(min_length=10, max_length=300)
+    segment_id: str
+    operations: list[SemanticOperation] = Field(min_length=1, max_length=8)
+
+class ModelStoryboard(Contract):
+    storyboard_version: Literal[2]
+    objective: str = Field(min_length=5, max_length=150)
+    prerequisites: list[Annotated[str, Field(min_length=1, max_length=80)]] = Field(max_length=4)
+    narration_units: list[ModelBeat] = Field(min_length=2, max_length=5)
+    scenes: list[StoryboardScene] = Field(min_length=1, max_length=3)
+    question: ModelQuestion | None = None
+
+# Legacy flat model data is retained only for explicit adapters and tests.
 class ModelShort(Contract):
     objective: str = Field(min_length=5, max_length=150)
     prerequisites: list[Annotated[str, Field(min_length=1, max_length=80)]] = Field(max_length=4)

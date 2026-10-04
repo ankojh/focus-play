@@ -1,0 +1,22 @@
+{
+  "notice": "Deterministic illustrative fixture, not live provider output or a benchmark. Boundaries are fixed test measurements.",
+  "segments": [{"id":"seg_lookup","source_id":"src_storyboard","text":"A table scan tests rows to find matching data. An index maps keys to rows and can find matching entries without testing every row. An index takes storage space and must be updated when indexed values change.","start_ms":null,"end_ms":null}],
+  "boundaries": [[0,6000],[6000,14000],[14000,22000],[22000,30000]],
+  "duration_ms": 30000,
+  "draft": {
+    "storyboard_version":2,
+    "objective":"Compare scanning with an index lookup",
+    "prerequisites":[],
+    "narration_units":[
+      {"beat_id":"beat_0","scene_id":"scene_0","purpose":"Introduce an illustrative search","text":"Imagine finding a matching value in an illustrative table. A table scan tests candidate rows against the search condition.","segment_id":"seg_lookup","operations":[{"kind":"reveal","target":"node_0"},{"kind":"reveal","target":"node_1"},{"kind":"focus","target":"node_0"}]},
+      {"beat_id":"beat_1","scene_id":"scene_0","purpose":"Show scan progressing through candidates","text":"Without a useful index, the scan can examine many rows before finding a match.","segment_id":"seg_lookup","operations":[{"kind":"change_state","target":"node_1","state_id":"scan_match"},{"kind":"focus","target":"node_1"}]},
+      {"beat_id":"beat_2","scene_id":"scene_1","purpose":"Replace scanning with a lookup mechanism","text":"An index instead maps a search key to matching rows, so the lookup need not test every row.","segment_id":"seg_lookup","operations":[{"kind":"reveal","target":"node_0"},{"kind":"reveal","target":"node_1"},{"kind":"connect","target":"conn_0"},{"kind":"focus","target":"node_0"}]},
+      {"beat_id":"beat_3","scene_id":"scene_1","purpose":"Explain the supported maintenance trade-off","text":"That shortcut has a trade-off: the index needs storage and updates when indexed values change.","segment_id":"seg_lookup","operations":[{"kind":"change_state","target":"node_0","state_id":"index_cost"},{"kind":"focus","target":"node_0"}]}
+    ],
+    "scenes":[
+      {"id":"scene_0","kind":"diagram","summary":"Illustrative table scan from candidate to match","template":"example","nodes":[{"id":"node_0","label":"Illustrative table","detail":"Scan tests candidate rows","slot":0,"icon":"table","role":"start"},{"id":"node_1","label":"Candidate row","detail":"Test against search condition","slot":1,"icon":"search","role":"step"}],"connections":[],"states":[{"id":"scan_match","target":"node_1","label":"Matching row","detail":"Scan reaches the matching data","role":"result"}]},
+      {"id":"scene_1","kind":"diagram","summary":"Index points to a row with maintenance cost","template":"process","nodes":[{"id":"node_0","label":"Index key","detail":"Maps keys to row locations","slot":0,"icon":"key","role":"start"},{"id":"node_1","label":"Matching row","detail":"Lookup follows the index mapping","slot":1,"icon":"table","role":"result"}],"connections":[{"id":"conn_0","source":"node_0","target":"node_1"}],"states":[{"id":"index_cost","target":"node_0","label":"Storage and updates","detail":"Maintain index when values change","role":"warning"}]}
+    ],
+    "question":null
+  }
+}

@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from app.config import Settings
-from app.contracts import (CandidateRanking, CandidateScore, Connection, DiagramNode, DraftAction, EvidenceRef, ImportRequest, Job, Lesson, LessonPlan, ModelShort, NarrationUnit, Objective, Question, SavedLearningRequest, Short, ShortDraft, TranscriptSegment)
+from app.contracts import (CandidateRanking, CandidateScore, Connection, DiagramNode, DraftAction, EvidenceRef, ImportRequest, Job, Lesson, LessonPlan, ModelShort, ModelStoryboard, NarrationUnit, Objective, Question, SavedLearningRequest, Short, ShortDraft, TranscriptSegment)
 from app.errors import AppError, Cancelled
 from app.main import create_app
 from app.sources import parse_transcript, retrieve, video_id
@@ -127,7 +127,22 @@ class StubModel:
                 u['segment_id']=u.pop('evidence')['segment_ids'][0];u.pop('start_ms');u.pop('end_ms')
             if body['question']:
                 body['question']['segment_id']=body['question'].pop('evidence')['segment_ids'][0];body['question'].pop('allowance_ms');body['question']['correct_answer']=body['question']['options'][body['question']['answer_index']];body['question']['distractors']=[o for i,o in enumerate(body['question'].pop('options')) if i!=body['question']['answer_index']];body['question'].pop('answer_index')
-            result=ModelShort.model_validate(body)
+            for u in body['narration_units']:
+                for field in ('beat_id','scene_id','purpose'):u.pop(field, None)
+            if contract is ModelStoryboard:
+                scene={'id':'scene_0','kind':'diagram','summary':'Show the supported lookup mechanism',
+                       'template':body.pop('template'),'nodes':body.pop('nodes'),'connections':body.pop('connections'),'states':[]}
+                if scene['template']=='dos_donts':scene['connections']=[]
+                if scene['template']=='cycle':
+                    scene['connections']=[{'id':f'edge_{i}','source':n['id'],'target':scene['nodes'][(i+1)%len(scene['nodes'])]['id']} for i,n in enumerate(scene['nodes'])]
+                body.update(storyboard_version=2,scenes=[scene])
+                for i,u in enumerate(body['narration_units']):
+                    u.update(beat_id=f'beat_{i}',scene_id='scene_0',purpose='Introduce the search' if i==0 else 'Show the matching result',
+                             operations=[{'kind':'reveal','target':n['id']} for n in (scene['nodes'][:1] if i==0 else scene['nodes'][1:])])
+                    if i==1:u['operations'] += [{'kind':'connect','target':e['id']} for e in scene['connections']]
+                result=ModelStoryboard.model_validate(body)
+            else:
+                result=ModelShort.model_validate(body)
         if validate:validate(result)
         return result
 
@@ -309,6 +324,7 @@ def test_model_evidence_is_copied_from_source_not_generated():
     s=source();d=draft_for(s.segments).model_dump();d.pop("actions")
     for u in d['narration_units']:
         u['segment_id']=u.pop('evidence')['segment_ids'][0];u.pop('start_ms');u.pop('end_ms')
+        for field in ('beat_id','scene_id','purpose'):u.pop(field, None)
     model=ModelShort.model_validate(d);final=attach_evidence(model,s.segments)
     assert all(u.evidence.quote==s.segments[0].text for u in final.narration_units)
     model.narration_units[0].segment_id='invented'
@@ -358,6 +374,7 @@ def test_schema_allows_written_narration_but_constrains_citations_and_icons(monk
     texts=['You can picture an index as a sorted list of keys with row locations.','Your query then jumps to the rows instead of checking every one in turn.']
     for i,u in enumerate(body['narration_units']):
         u['text']=texts[i];u['segment_id']=u.pop('evidence')['segment_ids'][0];u.pop('start_ms');u.pop('end_ms')
+        for field in ('beat_id','scene_id','purpose'):u.pop(field, None)
     captured=[]
     class Response:
         is_success=True

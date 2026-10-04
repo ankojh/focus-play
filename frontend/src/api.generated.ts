@@ -235,6 +235,23 @@ export interface components {
             /** Value */
             value?: number | null;
         };
+        /** DiagramState */
+        DiagramState: {
+            /** Id */
+            id: string;
+            /** Target */
+            target: string;
+            /** Label */
+            label: string;
+            /** Detail */
+            detail: string;
+            /**
+             * Role
+             * @default neutral
+             * @enum {string}
+             */
+            role: "neutral" | "start" | "step" | "result" | "warning" | "good" | "bad";
+        };
         /** ErrorInfo */
         ErrorInfo: {
             /** Code */
@@ -403,6 +420,12 @@ export interface components {
             /** Text */
             text: string;
             evidence: components["schemas"]["EvidenceRef"];
+            /** Beat Id */
+            beat_id?: string | null;
+            /** Scene Id */
+            scene_id?: string | null;
+            /** Purpose */
+            purpose?: string | null;
             /**
              * Start Ms
              * @default 0
@@ -505,6 +528,34 @@ export interface components {
         };
         /** Scene */
         Scene: {
+            /** Id */
+            id?: string | null;
+            /**
+             * Kind
+             * @default diagram
+             * @constant
+             */
+            kind: "diagram";
+            /**
+             * Summary
+             * @default
+             */
+            summary: string;
+            /**
+             * Evidence References
+             * @default []
+             */
+            evidence_references: components["schemas"]["EvidenceRef"][];
+            /**
+             * Beat Ids
+             * @default []
+             */
+            beat_ids: string[];
+            /**
+             * States
+             * @default []
+             */
+            states: components["schemas"]["DiagramState"][];
             /**
              * Template
              * @enum {string}
@@ -530,13 +581,17 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "appear" | "disappear" | "highlight" | "move" | "draw";
+            kind: "appear" | "disappear" | "highlight" | "move" | "draw" | "change_state";
             /** Target */
             target: string;
             /** At Ms */
             at_ms: number;
             /** To Slot */
             to_slot?: number | null;
+            /** State Id */
+            state_id?: string | null;
+            /** Beat Id */
+            beat_id?: string | null;
         };
         /** SearchItem */
         SearchItem: {
@@ -572,6 +627,14 @@ export interface components {
         };
         /** Short */
         Short: {
+            /**
+             * Storyboard Version
+             * @default 1
+             * @enum {integer}
+             */
+            storyboard_version: 1 | 2;
+            /** Timeline Compiler Version */
+            timeline_compiler_version?: string | null;
             /** Id */
             id: string;
             /** Objective */

@@ -7,7 +7,7 @@ import httpx
 import pytest
 
 from app.config import Settings
-from app.contracts import LessonPlan
+from app.contracts import LessonPlan, ModelStoryboard
 from app.errors import AppError
 from app.jobs import Jobs
 from app.providers import Ollama
@@ -93,6 +93,40 @@ def test_generation_wall_clock_limit_is_bounded(monkeypatch, tmp_path):
     with pytest.raises(AppError) as error:
         Ollama(Settings(data=tmp_path)).generate(LessonPlan, {}, threading.Event())
     assert error.value.code == "MODEL_TIMEOUT"
+
+
+def test_storyboard_runtime_schema_and_prompt_are_not_flat(monkeypatch, tmp_path):
+    from pathlib import Path
+    import jsonschema
+    fixture = json.loads((Path(__file__).resolve().parents[2] / 'fixtures/storyboard-lookup.json').read_text())
+    captured = []
+    class Response:
+        is_success = True
+        def __enter__(self):return self
+        def __exit__(self, *args):pass
+        def iter_lines(self):
+            yield json.dumps({'message':{'content':json.dumps(fixture['draft'])},'done':True})
+    class Client:
+        def __init__(self, **kwargs):pass
+        def __enter__(self):return self
+        def __exit__(self, *args):pass
+        def stream(self, *args, **kwargs):captured.append(kwargs['json']);return Response()
+    monkeypatch.setattr(httpx, 'Client', Client)
+    task = {'segments':fixture['segments'],'template':'example','question_required':False}
+    result = Ollama(Settings(data=tmp_path)).generate(ModelStoryboard, task, threading.Event())
+    assert len(result.narration_units) == 4
+    schema = captured[0]['format']
+    assert schema['properties']['narration_units']['minItems'] == 2
+    assert schema['properties']['narration_units']['maxItems'] == 5
+    assert 'exactly two' not in captured[0]['messages'][0]['content']
+    assert 'explicit beat operations' in captured[0]['messages'][0]['content']
+    for change in (lambda b:b['narration_units'][0].update(segment_id='invented'),
+                   lambda b:b['narration_units'][0]['operations'][0].update(target='invented'),
+                   lambda b:b['narration_units'][0].update(scene_id='invented'),
+                   lambda b:b['narration_units'][0].update(start_ms=100)):
+        wrong = json.loads(json.dumps(fixture['draft']))
+        change(wrong)
+        with pytest.raises(jsonschema.ValidationError):jsonschema.validate(wrong, schema)
 
 
 def test_source_review_rewrites_once_with_the_rejection_reason(tmp_path):

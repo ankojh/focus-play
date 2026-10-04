@@ -1,6 +1,6 @@
 import re
 import hashlib
-from .contracts import EvidenceRef, ShortDraft, Contract
+from .contracts import EvidenceRef, ShortDraft, StoryboardDraft, ModelStoryboard, Contract
 from .icons import ICONS
 from pydantic import Field
 
@@ -81,7 +81,15 @@ def validate_draft(draft: ShortDraft, segments, require_question: bool, earlier=
     for unit in draft.narration_units:
         validate_evidence(unit.evidence, segments)
     check_narration([unit.text for unit in draft.narration_units], earlier)
-    validate_diagram(draft)
+    visuals = draft.scenes if isinstance(draft, StoryboardDraft) else [draft]
+    if isinstance(draft, StoryboardDraft):
+        from .storyboard import validate_storyboard
+        validate_storyboard(draft)
+    for visual in visuals:
+        validate_diagram(visual)
+        for state in getattr(visual, "states", []):
+            if len(state.detail.split()) < 2:
+                raise ValueError("State detail must explain the supported change.")
     if require_question and draft.question is None:
         raise ValueError("This short must include a question.")
     if not require_question and draft.question is not None:
@@ -90,13 +98,14 @@ def validate_draft(draft: ShortDraft, segments, require_question: bool, earlier=
         validate_evidence(draft.question.evidence, segments)
     # Charts use supplied numeric values only; reject invented measurements.
     values={float(value) for s in segments for value in re.findall(r"(?<![\w.])\d+(?:\.\d+)?(?![\w.])",s.text)}
-    if draft.template == "chart" and any(node.value is None for node in draft.nodes):
-        raise ValueError("A chart requires source numeric values for every bar.")
-    for node in draft.nodes:
-        if draft.template != "chart":
-            node.value = None
-        elif node.value is not None and node.value not in values:
-            raise ValueError("A chart value must match an actual source number.")
+    for visual in visuals:
+        if visual.template == "chart" and any(node.value is None for node in visual.nodes):
+            raise ValueError("A chart requires source numeric values for every bar.")
+        for node in visual.nodes:
+            if visual.template != "chart":
+                node.value = None
+            elif node.value is not None and node.value not in values:
+                raise ValueError("A chart value must match an actual source number.")
 
 
 def planned_duration(shorts):
@@ -105,7 +114,10 @@ def planned_duration(shorts):
 
 def verify_support(model, draft, segments, cancel):
     result = model.generate(SupportCheck, {"task": "Review this short against the supplied passages. The narration is a teacher's paraphrase; rewording and simplifying are fine. "
-        "Reject only when a narration unit, diagram detail, or question answer states something the passages contradict or do not teach at all, "
+        "Review each beat's explicit operations, scene summary, labels, state changes, connections and narration together against that beat's cited passages. "
+        "A label/state introduced or revealed by a beat must be supported by that beat's evidence, not an unrelated retrieved passage. "
+        "An illustrative example must be clearly labelled and its mechanism supported; it is not a real dataset or benchmark. "
+        "Reject when a visual change targets an unrelated concept (including negative mentions), a narration unit, diagram detail, state label, or question answer states something the passages contradict or do not teach at all, "
         "turns a conditional claim into a guarantee, or when a question has more than one correct choice. Give the specific problem as the reason. "
         "This is a model review, not independent fact verification.", "draft": draft.model_dump(), "segments": [s.model_dump() for s in segments]}, cancel)
     if not result.supported:
@@ -122,13 +134,12 @@ def attach_evidence(content, segments):
         return EvidenceRef(source_id=segment.source_id, segment_ids=[segment.id], quote=segment.text,
                            start_ms=segment.start_ms, end_ms=segment.end_ms).model_dump()
     body=content.model_dump()
-    # Template cues are compiled from validated diagram references. The model
-    # chooses relationships; it does not need to invent animation target IDs.
-    actions=[{"kind":"appear","target":n["id"],"unit":0} for n in body["nodes"]]
-    actions.append({"kind":"highlight","target":body["nodes"][0]["id"],"unit":0})
-    actions.extend({"kind":"draw","target":e["id"],"unit":min(i,1)} for i,e in enumerate(body["connections"]))
-    actions.append({"kind":"highlight","target":body["nodes"][-1]["id"],"unit":1})
-    body["actions"]=sorted(actions,key=lambda a:a["unit"])
+    storyboard = isinstance(content, ModelStoryboard)
+    if not storyboard:
+        # Explicit version-1 adapter only. New storyboards never infer targets.
+        actions=[{"kind":"appear","target":n["id"],"unit":0} for n in body["nodes"]]
+        actions.extend({"kind":"draw","target":e["id"],"unit":min(i,1)} for i,e in enumerate(body["connections"]))
+        body["actions"]=sorted(actions,key=lambda a:a["unit"])
     for unit in body["narration_units"]:
         unit["evidence"]=reference(unit.pop("segment_id"))
     if body["question"]:
@@ -141,6 +152,8 @@ def attach_evidence(content, segments):
         if len({o.strip().lower() for o in options})!=len(options):
             raise ValueError("Question choices must be distinct.")
         question["options"],question["answer_index"]=options,index
+    if storyboard:
+        return StoryboardDraft.model_validate(body)
     result=ShortDraft.model_validate(body)
     refine_cues(result)
     return result
@@ -156,6 +169,9 @@ def terms(text):
 
 
 def refine_cues(draft):
+    # Lexical cues are a legacy adapter, never an override of explicit semantics.
+    if isinstance(draft, StoryboardDraft):
+        return
     from .contracts import DraftAction
     actions=[DraftAction(kind="appear",target=node.id,unit=0) for node in draft.nodes]
     for i,unit in enumerate(draft.narration_units):
@@ -170,6 +186,9 @@ def refine_cues(draft):
 
 
 def diagram_evidence(draft,segments):
+    if isinstance(draft, StoryboardDraft):
+        # Each scene's content/operations are reviewed against its cited beats.
+        return [beat.evidence for beat in draft.narration_units]
     refs=[]
     for node in draft.nodes:
         words=terms(node.label+" "+node.detail)

@@ -1,0 +1,308 @@
+{
+  "storyboard_version": 2,
+  "timeline_compiler_version": "1",
+  "id": "storyboard_fixture",
+  "objective": "Compare scanning with an index lookup",
+  "prerequisites": [],
+  "narration_units": [
+    {
+      "text": "Imagine finding a matching value in an illustrative table. A table scan tests candidate rows against the search condition.",
+      "evidence": {
+        "source_id": "src_storyboard",
+        "segment_ids": [
+          "seg_lookup"
+        ],
+        "start_ms": null,
+        "end_ms": null,
+        "quote": "A table scan tests rows to find matching data. An index maps keys to rows and can find matching entries without testing every row. An index takes storage space and must be updated when indexed values change."
+      },
+      "beat_id": "beat_0",
+      "scene_id": "scene_0",
+      "purpose": "Introduce an illustrative search",
+      "start_ms": 0,
+      "end_ms": 6000
+    },
+    {
+      "text": "Without a useful index, the scan can examine many rows before finding a match.",
+      "evidence": {
+        "source_id": "src_storyboard",
+        "segment_ids": [
+          "seg_lookup"
+        ],
+        "start_ms": null,
+        "end_ms": null,
+        "quote": "A table scan tests rows to find matching data. An index maps keys to rows and can find matching entries without testing every row. An index takes storage space and must be updated when indexed values change."
+      },
+      "beat_id": "beat_1",
+      "scene_id": "scene_0",
+      "purpose": "Show scan progressing through candidates",
+      "start_ms": 6000,
+      "end_ms": 14000
+    },
+    {
+      "text": "An index instead maps a search key to matching rows, so the lookup need not test every row.",
+      "evidence": {
+        "source_id": "src_storyboard",
+        "segment_ids": [
+          "seg_lookup"
+        ],
+        "start_ms": null,
+        "end_ms": null,
+        "quote": "A table scan tests rows to find matching data. An index maps keys to rows and can find matching entries without testing every row. An index takes storage space and must be updated when indexed values change."
+      },
+      "beat_id": "beat_2",
+      "scene_id": "scene_1",
+      "purpose": "Replace scanning with a lookup mechanism",
+      "start_ms": 14000,
+      "end_ms": 22000
+    },
+    {
+      "text": "That shortcut has a trade-off: the index needs storage and updates when indexed values change.",
+      "evidence": {
+        "source_id": "src_storyboard",
+        "segment_ids": [
+          "seg_lookup"
+        ],
+        "start_ms": null,
+        "end_ms": null,
+        "quote": "A table scan tests rows to find matching data. An index maps keys to rows and can find matching entries without testing every row. An index takes storage space and must be updated when indexed values change."
+      },
+      "beat_id": "beat_3",
+      "scene_id": "scene_1",
+      "purpose": "Explain the supported maintenance trade-off",
+      "start_ms": 22000,
+      "end_ms": 30000
+    }
+  ],
+  "evidence_references": [
+    {
+      "source_id": "src_storyboard",
+      "segment_ids": [
+        "seg_lookup"
+      ],
+      "start_ms": null,
+      "end_ms": null,
+      "quote": "A table scan tests rows to find matching data. An index maps keys to rows and can find matching entries without testing every row. An index takes storage space and must be updated when indexed values change."
+    }
+  ],
+  "scenes": [
+    {
+      "id": "scene_0",
+      "kind": "diagram",
+      "summary": "Illustrative table scan from candidate to match",
+      "evidence_references": [
+        {
+          "source_id": "src_storyboard",
+          "segment_ids": [
+            "seg_lookup"
+          ],
+          "start_ms": null,
+          "end_ms": null,
+          "quote": "A table scan tests rows to find matching data. An index maps keys to rows and can find matching entries without testing every row. An index takes storage space and must be updated when indexed values change."
+        }
+      ],
+      "beat_ids": [
+        "beat_0",
+        "beat_1"
+      ],
+      "states": [
+        {
+          "id": "scan_match",
+          "target": "node_1",
+          "label": "Matching row",
+          "detail": "Scan reaches the matching data",
+          "role": "result"
+        }
+      ],
+      "template": "example",
+      "nodes": [
+        {
+          "id": "node_0",
+          "label": "Illustrative table",
+          "detail": "Scan tests candidate rows",
+          "slot": 0,
+          "shape": "box",
+          "icon": "table",
+          "role": "start",
+          "value": null
+        },
+        {
+          "id": "node_1",
+          "label": "Candidate row",
+          "detail": "Test against search condition",
+          "slot": 1,
+          "shape": "box",
+          "icon": "search",
+          "role": "step",
+          "value": null
+        }
+      ],
+      "connections": [],
+      "actions": [
+        {
+          "kind": "appear",
+          "target": "node_0",
+          "at_ms": 0,
+          "to_slot": null,
+          "state_id": null,
+          "beat_id": "beat_0"
+        },
+        {
+          "kind": "appear",
+          "target": "node_1",
+          "at_ms": 0,
+          "to_slot": null,
+          "state_id": null,
+          "beat_id": "beat_0"
+        },
+        {
+          "kind": "highlight",
+          "target": "node_0",
+          "at_ms": 0,
+          "to_slot": null,
+          "state_id": null,
+          "beat_id": "beat_0"
+        },
+        {
+          "kind": "change_state",
+          "target": "node_1",
+          "at_ms": 6000,
+          "to_slot": null,
+          "state_id": "scan_match",
+          "beat_id": "beat_1"
+        },
+        {
+          "kind": "highlight",
+          "target": "node_1",
+          "at_ms": 6000,
+          "to_slot": null,
+          "state_id": null,
+          "beat_id": "beat_1"
+        }
+      ],
+      "start_ms": 0,
+      "end_ms": 14000
+    },
+    {
+      "id": "scene_1",
+      "kind": "diagram",
+      "summary": "Index points to a row with maintenance cost",
+      "evidence_references": [
+        {
+          "source_id": "src_storyboard",
+          "segment_ids": [
+            "seg_lookup"
+          ],
+          "start_ms": null,
+          "end_ms": null,
+          "quote": "A table scan tests rows to find matching data. An index maps keys to rows and can find matching entries without testing every row. An index takes storage space and must be updated when indexed values change."
+        }
+      ],
+      "beat_ids": [
+        "beat_2",
+        "beat_3"
+      ],
+      "states": [
+        {
+          "id": "index_cost",
+          "target": "node_0",
+          "label": "Storage and updates",
+          "detail": "Maintain index when values change",
+          "role": "warning"
+        }
+      ],
+      "template": "process",
+      "nodes": [
+        {
+          "id": "node_0",
+          "label": "Index key",
+          "detail": "Maps keys to row locations",
+          "slot": 0,
+          "shape": "box",
+          "icon": "key",
+          "role": "start",
+          "value": null
+        },
+        {
+          "id": "node_1",
+          "label": "Matching row",
+          "detail": "Lookup follows the index mapping",
+          "slot": 1,
+          "shape": "box",
+          "icon": "table",
+          "role": "result",
+          "value": null
+        }
+      ],
+      "connections": [
+        {
+          "id": "conn_0",
+          "source": "node_0",
+          "target": "node_1"
+        }
+      ],
+      "actions": [
+        {
+          "kind": "appear",
+          "target": "node_0",
+          "at_ms": 14000,
+          "to_slot": null,
+          "state_id": null,
+          "beat_id": "beat_2"
+        },
+        {
+          "kind": "appear",
+          "target": "node_1",
+          "at_ms": 14000,
+          "to_slot": null,
+          "state_id": null,
+          "beat_id": "beat_2"
+        },
+        {
+          "kind": "draw",
+          "target": "conn_0",
+          "at_ms": 14000,
+          "to_slot": null,
+          "state_id": null,
+          "beat_id": "beat_2"
+        },
+        {
+          "kind": "highlight",
+          "target": "node_0",
+          "at_ms": 14000,
+          "to_slot": null,
+          "state_id": null,
+          "beat_id": "beat_2"
+        },
+        {
+          "kind": "change_state",
+          "target": "node_0",
+          "at_ms": 22000,
+          "to_slot": null,
+          "state_id": "index_cost",
+          "beat_id": "beat_3"
+        },
+        {
+          "kind": "highlight",
+          "target": "node_0",
+          "at_ms": 22000,
+          "to_slot": null,
+          "state_id": null,
+          "beat_id": "beat_3"
+        }
+      ],
+      "start_ms": 14000,
+      "end_ms": 30000
+    }
+  ],
+  "question": null,
+  "audio_path": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.wav",
+  "measured_duration_ms": 30000,
+  "status": "ready",
+  "error": null,
+  "optional": false,
+  "question_required": false,
+  "cache_hit": false,
+  "provider_settings": {},
+  "timings": {}
+}

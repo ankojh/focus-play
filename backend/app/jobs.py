@@ -5,12 +5,13 @@ import json
 import threading
 import time
 import uuid
-from .contracts import Job, Lesson, LessonPlan, Scene, SceneAction, Short, ShortDraft, ErrorInfo, ModelShort, SavedLearningRequest, CandidateRanking
+from .contracts import Job, Lesson, LessonPlan, Short, StoryboardDraft, ErrorInfo, ModelStoryboard, SavedLearningRequest, CandidateRanking
+from .storyboard import STORYBOARD_VERSION, COMPILER_VERSION, compile_storyboard
 from .errors import AppError, Cancelled
 from .providers import check_cancel
 from .ranking import KEEP, pick, ranking_task, validator
 from .sources import retrieve
-from .validation import validate_draft, verify_support, planned_duration, attach_evidence, refine_cues, diagram_evidence
+from .validation import validate_draft, verify_support, planned_duration, attach_evidence, diagram_evidence
 from .youtube import YouTubeSources, queries, require_youtube
 
 
@@ -272,14 +273,15 @@ class Jobs:
                 if attempt:
                     raise AppError("UNSUPPORTED_CLAIM", "The model source review could not support this short. Retry or use a more focused learning goal.", 422) from exc
                 retry={**task,"task":task["task"]+" A reviewer rejected the previous version: "+str(exc)[:400]+" Fix that problem."}
-                draft = attach_evidence(await asyncio.to_thread(self.model.generate, ModelShort, retry, cancel, valid), segments)
+                draft = attach_evidence(await asyncio.to_thread(self.model.generate, ModelStoryboard, retry, cancel, valid), segments)
         return draft
 
     def context(self,lesson,focus=None):
         sources=self.youtube_sources(lesson)
         segments=retrieve(sources,focus or lesson.request.goal)
         key_base={"source_policy":"youtube-v1","sources":[{"id":s.id,"hash":s.content_hash} for s in sources],
-            "settings":lesson.provider_settings,"request":lesson.request.model_dump(exclude={"request_id","source_mode","source_ids"})}
+            "settings":lesson.provider_settings,"storyboard_version":STORYBOARD_VERSION,"timeline_compiler_version":COMPILER_VERSION,
+            "request":lesson.request.model_dump(exclude={"request_id","source_mode","source_ids"})}
         return segments,key_base
 
     async def advance(self, lid):
@@ -374,20 +376,25 @@ class Jobs:
         await self.stage(lesson, "preparing the first short" if index == 0 else f"preparing short {index + 1}", short, "generating")
         model_start = time.monotonic()
         def valid(content):
-            draft = attach_evidence(content, segments) if isinstance(content, ModelShort) else content
-            if draft.template != template:
-                raise ValueError(f"Use the {template} template.")
+            draft = attach_evidence(content, segments) if isinstance(content, ModelStoryboard) else content
+            if draft.scenes[0].template != template:
+                raise ValueError(f"Use the {template} template for the first scene.")
             validate_draft(draft, segments, short.question_required, earlier_narration)
-            refine_cues(draft)
-        task = {"task": "Teach one learning point to this learner in your own words. Return a complete ModelShort. "
-                    "The first unit opens the idea plainly; the second explains how or why, or gives a concrete tip. Each unit cites the segment_id whose passage teaches it. "
+        task = {"task": "Teach one learning outcome with a supported visual demonstration. Return a complete ModelStoryboard version 2. "
+                    "Aim for 3 to 5 brief beats: question/situation, baseline, meaningful change or alternative, takeaway. A simpler two-beat explanation is allowed. "
+                    "Use 40 to 80 total spoken words, not more words just to add beats. Each beat has a unique beat_id, purpose, scene_id, cited segment_id and explicit operations. "
+                    "Use 1 to 3 scenes in contiguous order. A changed scene_id replaces the scene; never return to an earlier scene. "
+                    "Reveal nodes before focusing, moving, hiding or changing their state; connect only after both endpoints are revealed. "
+                    "Show concepts changing, not every label at once. Explicitly target the concept being taught, not a name mentioned as absent. "
+                    "State changes select an authored state_id for that target with supported label/detail/role. Mark synthetic examples as illustrative; do not invent benchmarks. "
+                    "Every node needs a reveal and every connection a connect. For cycle supply the explicit loop connections; dos_donts has no connections. "
                     "Do not repeat earlier_narration. A question supplies a correct_answer, 1 to 3 plausible incorrect distractors, and a one-sentence explanation. Question must be null unless required. "
-                    "Use 40 to 80 total spoken words in exactly two narration units. Use 2 to 4 nodes with IDs node_0 through node_3 in order and unique slots. "
-                    f"Template {template}: {TEMPLATES[template]} Connections refer to existing nodes. The application derives all animation cues.",
+                    "Use 2 to 4 nodes per scene with IDs node_0 through node_3 in order and unique slots. "
+                    f"First scene template {template}: {TEMPLATES[template]} Later scenes can use any allowed template. Do not author timestamps or renderer code.",
                 "objective": short.objective, "template": template, "question_required": short.question_required,
                 "learner": lesson.request.prior_knowledge, "earlier_objectives": [s.objective for s in lesson.shorts[:index]],
                 "earlier_narration": earlier_narration, "segments": [s.model_dump() for s in segments]}
-        draft = ShortDraft.model_validate(cached) if cached else attach_evidence(await asyncio.to_thread(self.model.generate, ModelShort, task, cancel, valid), segments)
+        draft = StoryboardDraft.model_validate(cached) if cached else attach_evidence(await asyncio.to_thread(self.model.generate, ModelStoryboard, task, cancel, valid), segments)
         valid(draft)
         short.timings["generation_seconds"] = time.monotonic() - model_start
         await self.stage(lesson, "validating source references", short, "validating")
@@ -400,7 +407,8 @@ class Jobs:
         speech_start = time.monotonic()
         # Duration repair is separate from the two schema repairs; voice speed remains fixed.
         for duration_attempt in range(2):
-            speech_key = cache_key({"texts": [u.text for u in draft.narration_units], "settings": lesson.provider_settings, "sources": key_base["sources"], "language": lesson.request.language})
+            speech_key = cache_key({"texts": [u.text for u in draft.narration_units], "settings": lesson.provider_settings, "sources": key_base["sources"], "language": lesson.request.language,
+                                    "storyboard_version": STORYBOARD_VERSION, "timeline_compiler_version": COMPILER_VERSION})
             try:
                 audio, duration, audio_cached = await asyncio.to_thread(self.speech.synthesize, draft.narration_units, speech_key, cancel)
                 break
@@ -408,14 +416,21 @@ class Jobs:
                 if exc.code != "SPEECH_DURATION" or duration_attempt:
                     raise
                 task["task"] += " The speech exceeded 40 seconds. Shorten to 40 to 50 words."
-                draft = attach_evidence(await asyncio.to_thread(self.model.generate, ModelShort, task, cancel, valid), segments)
+                draft = attach_evidence(await asyncio.to_thread(self.model.generate, ModelStoryboard, task, cancel, valid), segments)
                 draft = await self.reviewed(draft, task, segments, valid, cancel)
                 self.store.cache_put(short_key, draft.model_dump())
         else:
             raise AppError("SPEECH_DURATION", "Speech could not fit the short duration limit.", 422)
         check_cancel(cancel)
         short.timings["speech_seconds"] = time.monotonic() - speech_start
-        short.narration_units = draft.narration_units
+        compile_start = time.monotonic()
+        try:
+            scenes, units = compile_storyboard(draft, duration)
+        except ValueError as exc:
+            raise AppError("STORYBOARD_TIMELINE_INVALID", "The measured storyboard could not be compiled. Retry to regenerate this short; ready shorts are preserved.", 422) from exc
+        check_cancel(cancel)
+        short.timings["storyboard_compile_seconds"] = time.monotonic() - compile_start
+        short.narration_units = units
         refs = [u.evidence for u in draft.narration_units] + diagram_evidence(draft,segments)
         if draft.question:
             refs.append(draft.question.evidence)
@@ -424,9 +439,12 @@ class Jobs:
         short.question = draft.question
         short.measured_duration_ms = duration
         short.audio_path = audio
-        short.scenes = [Scene(template=draft.template, nodes=draft.nodes, connections=draft.connections,
-            actions=[SceneAction(kind=a.kind, target=a.target, to_slot=a.to_slot, at_ms=draft.narration_units[a.unit].start_ms) for a in draft.actions], end_ms=duration)]
+        short.scenes = scenes
+        short.storyboard_version = STORYBOARD_VERSION
+        short.timeline_compiler_version = COMPILER_VERSION
         short.status = "ready"
+        # Validate the final playback object before the atomic store publication.
+        Short.model_validate(short.model_dump())
         short.error = None
         short.cache_hit = bool(cached and audio_cached)
         short.provider_settings = dict(lesson.provider_settings)
@@ -441,7 +459,9 @@ class Jobs:
             preceding = sum(s.measured_duration_ms + (20000 if s.question else 0) for s in lesson.shorts[:index]) / 1000
             lesson.metrics[f"waiting_before_short_{index + 1}_seconds"] = max(0, elapsed - lesson.metrics.get("first_playable_seconds", elapsed) - preceding)
         lesson.status = "partially_ready"
-        lesson.job.stage_timings = {"generation_seconds": sum(s.timings.get("generation_seconds", 0) for s in lesson.shorts), "validation_seconds": sum(s.timings.get("validation_seconds", 0) for s in lesson.shorts), "speech_seconds": sum(s.timings.get("speech_seconds", 0) for s in lesson.shorts)}
+        lesson.job.stage_timings = {name: sum(s.timings.get(name, 0) for s in lesson.shorts)
+                                   for name in ("generation_seconds", "validation_seconds", "speech_seconds", "storyboard_compile_seconds")}
+        check_cancel(cancel)
         self.store.save(lesson)
         if all(s.status == "ready" for s in lesson.shorts):
             self.complete(lesson)

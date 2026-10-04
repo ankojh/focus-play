@@ -51,12 +51,13 @@ Open [Focus Play](http://127.0.0.1:5173). Enter the goal, current knowledge, and
 
 ## Controls and recovery
 
-- Play, pause, replay, or seek within a ready short. On the player, Space controls playback and the arrow keys seek five seconds.
-- Use the outline or previous/next controls to select a short. Refresh restores the selected short and audio position. Audio waits for a click.
-- Questions have a 20-second content allowance. Questions appear at the end of every third required short. Answer feedback includes an explanation.
-- After preparation finishes, **Show an example** or **Explain again** offers one additional short. Approve the visible 40-second allowance before it starts. The original time budget is shown separately. Pauses can increase elapsed time.
+- Play, pause, or seek within a ready short. Each short loops rather than advancing automatically. Space controls playback; left/right seek five seconds.
+- Use the outline, previous/next controls, up/down keys, or vertical scroll/swipe to select a short. Refresh restores the selected short and audio position without autoplay.
+- Like/dislike reactions are saved per short. **Sources** toggles the details pane without interrupting playback.
+- Questions have a 20-second content allowance and appear near the end of every third required short. Answer feedback remains available while the short loops. The player has no extra-explanation buttons. Pauses and loops can increase elapsed time.
 - **Cancel preparation** preserves ready shorts. After a provider error or interruption, **Retry** keeps ready work and uses valid cached stages. If a completed audio file is missing, use **Repair missing audio**.
 - Missing evidence stops that part of a lesson. Retry or use a more focused goal. There is no import, sample, website, or model-knowledge fallback.
+- Model JSON failures are reported separately from missing evidence, with the failed stage identified. Malformed or repeating output is retried from a clean prompt; schema/content errors receive targeted repair feedback. An output-token-limit error points to `OLLAMA_PREDICT`. Evidence and content validation still run on every attempt.
 
 ## YouTube sources and saved history
 
@@ -72,11 +73,11 @@ Diagrams have nine layouts: process, comparison, worked example, timeline, chart
 
 Passage retrieval shares the context across videos, penalises intros and sponsor reads, and includes neighbouring passages. Lessons start with basics and avoid repeated narration. All diagram motion follows the audio clock and honours reduced-motion preferences.
 
-See [.env.example](.env.example). `OLLAMA_MODEL` selects an installed local model. The default uses 8192 context tokens, at most 2200 output tokens, temperature 0, seed 42, and disabled thinking. The worker runs one model task at a time. Each short has two measured narration phrases. Word counts are bounded; measured audio sets the final duration. Kokoro uses `af_heart`, a fixed speech speed of 1, 24 kHz mono PCM WAV, and measured phrase boundaries. Captions are phrase aligned.
+See [.env.example](.env.example). `OLLAMA_MODEL` selects an installed local model. The default uses 8192 context tokens, at most 2200 output tokens, temperature 0, seed 42 (43 and 44 for the two bounded retries), repetition penalty 1.0, and disabled thinking. The JSON schema is sent both as Ollama's `format` and in the prompt for backends that do not enforce structured output. The worker runs one model task at a time. New shorts use version-2 storyboards with 2–5 cited narration beats (normally 3–5) and 1–3 diagram scenes. Explicit reveal/focus/connect/hide/move/state-change operations are compiled only after speech measurement. Scene and action times are absolute audio milliseconds, with contiguous half-open scene intervals and a held final frame. Word counts are bounded; measured audio sets the final duration, at most 40 seconds. Kokoro uses `af_heart`, a fixed speech speed of 1, 24 kHz mono PCM WAV, and measured phrase boundaries. Captions are phrase aligned.
 
 `SPEECH_PROVIDER=macos` selects a labelled development substitute. It uses `say` and `afconvert`. It is not Kokoro. The default and the reported live tests use Kokoro.
 
-`.data/` contains SQLite records, parsed transcripts, managed audio, local Hugging Face files, and diagnostics. Cache keys include source identity and content, model digest, prompt/schema versions, language, and voice settings. This data is ignored by Git. Back up the whole data directory while the API is stopped. Do not share it if the transcripts are private. The UI assets and voices need no remote fonts or services after setup.
+`.data/` contains SQLite records, parsed transcripts, managed audio, local Hugging Face files, and diagnostics. Cache keys include source identity and content, model digest, prompt/schema versions, storyboard/compiler versions, language, and voice settings. This data is ignored by Git. Back up the whole data directory while the API is stopped. Do not share it if the transcripts are private. The UI assets and voices need no remote fonts or services after setup.
 
 ## Checks
 
@@ -91,7 +92,7 @@ npm test --prefix frontend
 FOCUS_LIVE=1 npm test --prefix frontend -- tests/live.spec.ts
 ```
 
-The Python tests use explicit test providers. The browser checks use explicit API and audio fixtures. They do not establish live source access, model quality, or speech performance. See [YouTube change checks](docs/youtube-source-change.md) for current results and the remaining live-check dependency. [Earlier validation](docs/validation.md) and [earlier performance measurements](docs/performance.md) describe the previous imported-source version. See [design and limitations](docs/design.md) for the current flow.
+The Python tests use explicit test providers. The browser checks use explicit API and audio fixtures. See [storyboard implementation and compatibility](docs/storyboards.md) for the versioned format, measured compiler cost, screenshots, and live-quality limitations. Regenerate the shared storyboard playback fixture with `.venv/bin/python scripts/export_storyboard_fixture.py` after changing its authoring fixture or compiler. They do not establish live source access, model quality, or speech performance. See [YouTube change checks](docs/youtube-source-change.md) for current results and the remaining live-check dependency. [Earlier validation](docs/validation.md) and [earlier performance measurements](docs/performance.md) describe the previous imported-source version. See [design and limitations](docs/design.md) for the current flow.
 
 To measure the current YouTube flow, start all providers and configure the server key:
 

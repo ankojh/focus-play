@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { Check, X } from 'lucide-react';
 import type { Scene } from './api';
 import { ICONS } from './icons';
+import { diagramFrame } from './playback';
 // Every visual state is computed from audio time. No independent animation timeline runs.
 type Node = Scene['nodes'][number];
 type Box = {x:number;y:number;w:number;h:number};
@@ -45,27 +46,15 @@ function edge(b:Box,tx:number,ty:number):[number,number] {
 
 export function Diagram({scene, time}: {scene: Scene; time: number}) {
   const reduced=useSyncExternalStore(subscribeMotion,getMotion,()=>true);
-  const progress=(at:number)=>reduced?1:Math.max(0,Math.min(1,(time-at)/650));
   const template=scene.template;
-  const actions=[...scene.actions].sort((a,b)=>a.at_ms-b.at_ms);
-  const state=new Map(scene.nodes.map(n=>[n.id,{visible:!actions.some(a=>a.target===n.id&&a.kind==='appear'),highlight:false,slot:n.slot,fromSlot:n.slot,moveAt:-1000,appearAt:-1000,disappearAt:-1}]));
-  const drawn=new Map(scene.connections.filter(e=>!actions.some(a=>a.target===e.id&&a.kind==='draw')).map(e=>[e.id,-1000]));
-  for(const a of actions) {
-    if(a.at_ms>time)break;
-    if(a.kind==='draw'){drawn.set(a.target,a.at_ms);continue;}
-    const node=state.get(a.target);if(!node)continue;
-    if(a.kind==='appear'){node.visible=true;node.appearAt=a.at_ms;node.disappearAt=-1;}
-    if(a.kind==='disappear'){node.visible=progress(a.at_ms)<1;node.disappearAt=a.at_ms;}
-    if(a.kind==='highlight'){for(const n of state.values())n.highlight=false;node.highlight=true;}
-    if(a.kind==='move'&&a.to_slot!=null){node.fromSlot=node.slot;node.slot=a.to_slot;node.moveAt=a.at_ms;}
-  }
+  const {state,drawn,progress}=diagramFrame(scene,time,reduced);
   const boxes=layout(template,scene.nodes);
   const fixed=template==='cycle'||template==='dos_donts'||template==='key_fact';
   const slots=template==='comparison'||template==='chart'?paired:column;
   const box=(id:string):Box=>{
     const b=boxes.get(id)!,s=state.get(id)!;
     if(fixed)return b;
-    const p=progress(s.moveAt),from=slots[s.fromSlot],to=slots[s.slot];
+    const p=progress(s.moveAt,id),from=slots[s.fromSlot],to=slots[s.slot];
     return {...b,x:from[0]+(to[0]-from[0])*p,y:from[1]+(to[1]-from[1])*p};
   };
   const focus=[...state.values()].some(s=>s.highlight);
@@ -76,14 +65,14 @@ export function Diagram({scene, time}: {scene: Scene; time: number}) {
   let top=Math.min(...all.map(b=>b.y-b.h/2))-40,bottom=Math.max(...all.map(b=>b.y+b.h/2+(template==='chart'?26:0)));
   if(template==='timeline')left=Math.min(left,28);
   if(template==='dos_donts')top=Math.min(top,30);
-  if(!fixed){const moves=scene.actions.filter(a=>a.kind==='move'&&a.to_slot!=null).map(a=>slots[a.to_slot!]);for(const [x,y] of moves){left=Math.min(left,x-158);right=Math.max(right,x+158);bottom=Math.max(bottom,y+50);}}
+  if(!fixed){for(const action of scene.actions.filter(a=>a.kind==='move'&&a.to_slot!=null)){const [x,y]=slots[action.to_slot!],b=boxes.get(action.target)!;left=Math.min(left,x-b.w/2);right=Math.max(right,x+b.w/2);top=Math.min(top,y-b.h/2-40);bottom=Math.max(bottom,y+b.h/2+(template==='chart'?26:0));}}
   const pad=16,view={x:left-pad,y:top-pad,w:right-left+2*pad,h:bottom-top+2*pad};
   // Arrows flow while audio plays; the dash offset is derived from the audio clock.
   const flow=reduced?0:-(time/45)%16;
   const links=template==='cycle'
-    ? scene.nodes.map((n,i)=>({id:`loop_${i}`,source:n.id,target:scene.nodes[(i+1)%scene.nodes.length].id,at:Math.max(state.get(n.id)!.appearAt,state.get(scene.nodes[(i+1)%scene.nodes.length].id)!.appearAt)}))
+    && !scene.id ? scene.nodes.map((n,i)=>({id:`loop_${i}`,source:n.id,target:scene.nodes[(i+1)%scene.nodes.length].id,at:Math.max(state.get(n.id)!.appearAt,state.get(scene.nodes[(i+1)%scene.nodes.length].id)!.appearAt)}))
     : template==='dos_donts' ? [] : scene.connections.filter(e=>drawn.has(e.id)).map(e=>({...e,at:drawn.get(e.id)!}));
-  return <svg className="diagram" viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`} role="img" aria-label={`${template} diagram: ${scene.nodes.map(n=>n.label+(n.value!=null?`: ${n.value}`:'')).join(', ')}`}>
+  return <svg className="diagram" data-scene-id={scene.id??'legacy'} viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`} role="img" aria-label={`${template} diagram: ${scene.nodes.filter(n=>state.get(n.id)!.visible).map(n=>state.get(n.id)!.label+(n.value!=null?`: ${n.value}`:'')).join(', ')}`}>
     <defs>
       <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#d0d0d0"/></marker>
       <filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="7" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
@@ -99,7 +88,7 @@ export function Diagram({scene, time}: {scene: Scene; time: number}) {
     {links.map(e=>{
       const s=state.get(e.source),t=state.get(e.target);
       if(!s?.visible||!t?.visible)return null;
-      const a=box(e.source),b=box(e.target),p=progress(e.at);
+      const a=box(e.source),b=box(e.target),p=progress(e.at,e.id);
       const [x1,y1]=edge(a,b.x,b.y),[x2,y2]=edge(b,a.x,a.y);
       // Cycle arrows bow outward around the loop centre.
       const bend=template==='cycle'?(()=>{const mx=(x1+x2)/2,my=(y1+y2)/2,dx=mx-200,dy=my-300,l=Math.hypot(dx,dy)||1;return ` Q ${mx+dx/l*40} ${my+dy/l*40} `;})():' L ';
@@ -111,23 +100,23 @@ export function Diagram({scene, time}: {scene: Scene; time: number}) {
     })}
     {scene.nodes.map((node,i)=>{
       const s=state.get(node.id)!;if(!s.visible)return null;
-      const b=box(node.id),accent=ROLES[node.role??'neutral']??ROLES.neutral;
+      const b=box(node.id),accent=ROLES[s.role]??ROLES.neutral;
       const Icon=node.icon?ICONS[node.icon]:undefined;
       const big=template==='key_fact'&&b.w>300,stacked=b.w<260;
-      const opacity=progress(s.appearAt)*(s.disappearAt<0?1:1-progress(s.disappearAt))*(focus&&!s.highlight?0.7:1);
+      const opacity=progress(s.appearAt,node.id)*(s.disappearAt<0?1:1-progress(s.disappearAt,node.id))*(focus&&!s.highlight?0.7:1);
       const number=NUMBERED.has(template)?String(i+1):null;
       const max=Math.max(1,...scene.nodes.map(n=>n.value??0)),barWidth=node.value==null?0:node.value/max*(b.w-44);
       const iconSize=big?44:stacked?26:24;
-      const labelLines=wrap(node.label,big?22:Math.floor((b.w-(stacked?24:86))/7));
-      const detailLines=wrap(node.detail,Math.floor((b.w-(stacked?24:86))/5.7));
+      const labelLines=wrap(s.label,big?22:Math.floor((b.w-(stacked?24:86))/7));
+      const detailLines=wrap(s.detail,Math.floor((b.w-(stacked?24:86))/5.7));
       // Fit all lines within the card, including narrow key-fact support cards.
       const labelStep=big?26:16, detailStep=13;
       const labelY=Icon?-b.h/2+iconSize+38:-6;
       const detailY=labelY+labelLines.length*labelStep+1;
       const lastY=detailY+Math.max(0,detailLines.length-1)*detailStep;
       const textScale=Math.min(1,(b.h/2-9-labelY)/Math.max(1,lastY-labelY));
-      return <g key={node.id} data-testid={`node-${node.id}`} transform={`translate(${b.x},${b.y})`} opacity={opacity}>
-        <title>{node.label}{node.detail?`: ${node.detail}`:''}</title>
+      return <g key={node.id} data-testid={`node-${node.id}`} data-focused={s.highlight} transform={`translate(${b.x},${b.y})`} opacity={opacity}>
+        <title>{s.label}{s.detail?`: ${s.detail}`:''}</title>
         {template==='timeline' && <circle cx={38-b.x} cy="0" r="5" fill={accent==='#b7b7b7'?'#ff5c57':accent}/>}
         <rect x={-b.w/2} y={-b.h/2} width={b.w} height={b.h} rx={node.shape==='circle'?40:16} fill={s.highlight?'#2f2a26':'#222'} stroke={s.highlight?accent:'#4a4a4a'} strokeWidth={s.highlight?2.5:1} filter={s.highlight&&!reduced?'url(#glow)':undefined}/>
         <rect x={-b.w/2} y={-b.h/2+12} width="4" height={b.h-24} rx="2" fill={accent}/>
