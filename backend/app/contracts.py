@@ -399,7 +399,16 @@ class PlanningState(Contract):
     missing_coverage: list[CoverageGap] = Field(default=[], max_length=2)
     deferred_concept_ids: list[str] = Field(default=[], max_length=80)
 
+class Readiness(Contract):
+    version: Literal[1] = 1
+    ready_short_ids: list[str] = []
+    missing_media_short_ids: list[str] = []
+    # From the beginning at position zero, not a forecast for an arbitrary client.
+    initial_contiguous_media_ms: int = 0
+
 class Lesson(Contract):
+    # Computed on API snapshots; old saved lessons need no migration.
+    readiness: Readiness | None = None
     # None means legacy policy: never automatically expand old ready lessons.
     planning: PlanningState | None = None
     acquisition: AcquisitionLedger = Field(default_factory=AcquisitionLedger)

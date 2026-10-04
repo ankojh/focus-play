@@ -15,6 +15,7 @@ from .storyboard import STORYBOARD_VERSION, COMPILER_VERSION, compile_storyboard
 from .assets import Assets
 from .visuals import VISUAL_VERSION
 from .errors import AppError, Cancelled
+from .readiness import required_media, snapshot_readiness
 from .providers import check_cancel
 from .ranking import KEEP, pick, ranking_task, validator
 from .sources import retrieve
@@ -56,6 +57,27 @@ class Jobs:
         self.sequence = 0
         self.task = None
         self.closing = False
+        self.enqueued_at = {}
+        self.turn_started = {}
+        self.current_short = {}
+        self.accepted_at = {}
+
+    def present(self, lesson):
+        lesson.readiness = snapshot_readiness(lesson, self.settings.data, self.assets)
+        return lesson
+
+    def media_available(self, short):
+        try:
+            required_media(short, self.settings.data, self.assets)
+            return True
+        except (AppError, OSError):
+            return False
+
+    def measure(self, lesson, metric, elapsed):
+        lesson.metrics[metric] = lesson.metrics.get(metric, 0) + elapsed
+        short = self.current_short.get(lesson.id)
+        if short is not None:
+            short.timings[metric] = short.timings.get(metric, 0) + elapsed
 
     def start(self):
         self.store.recover()
@@ -71,6 +93,8 @@ class Jobs:
             await self.task
 
     def reserve(self, lid):
+        if self.closing:
+            raise AppError("SERVER_STOPPING", "The server is shutting down. Retry after restart.", 503)
         if lid in self.active:
             raise AppError("JOB_ACTIVE", "This lesson is already being prepared.", 409)
         if len(self.active) >= self.settings.queue_size or self.queue.full():
@@ -78,9 +102,12 @@ class Jobs:
         self.active.add(lid)
         self.cancel_flags[lid] = threading.Event()
 
-    def enqueue(self, lid, priority=0):
+    def enqueue(self, lid):
+        # FIFO turns: new arrivals cannot leapfrog an existing continuation.
+        # At most queue_size - 1 other turns precede a requeued lesson.
         self.sequence += 1
-        self.queue.put_nowait((priority, self.sequence, lid))
+        self.enqueued_at[lid] = time.monotonic()
+        self.queue.put_nowait((0, self.sequence, lid))
 
     def create(self, request):
         existing = self.store.by_request(request.request_id)
@@ -96,6 +123,7 @@ class Jobs:
                         planning=new_state(request.time_budget_seconds * 1000),
                         acquisition=AcquisitionLedger(per_round_limit=self.settings.rank_candidates,
                                                       transcript_limit=2 * self.settings.rank_candidates))
+        self.accepted_at[lid] = time.monotonic()
         self.store.save(lesson)
         self.enqueue(lid)
         return lesson
@@ -117,7 +145,7 @@ class Jobs:
 
     def retry(self, lid):
         lesson = self.store.lesson(lid)
-        missing_media = any(s.status == "ready" and not (self.settings.data / "audio" / (s.audio_path or "missing")).is_file() for s in lesson.shorts)
+        missing_media = any(s.status == "ready" and not self.media_available(s) for s in lesson.shorts)
         if lesson.job.status not in {"failed", "cancelled", "interrupted"} and not missing_media:
             raise AppError("RETRY_NOT_AVAILABLE", "Retry is available after a failure, cancellation, or server restart.", 409)
         self.reserve(lid)
@@ -126,7 +154,7 @@ class Jobs:
         lesson.job.error = None
         lesson.status = "partially_ready" if any(s.status == "ready" for s in lesson.shorts) else "queued"
         for short in lesson.shorts:
-            if short.status != "ready" or not (self.settings.data / "audio" / (short.audio_path or "missing")).exists():
+            if short.status != "ready" or not self.media_available(short):
                 short.status = "queued"
                 short.error = None
         self.store.save(lesson, resume=True)
@@ -171,6 +199,13 @@ class Jobs:
                 self.queue.task_done()
                 return
             requeue = False
+            turn_start = time.monotonic()
+            self.turn_started[lid] = turn_start
+            queued = self.enqueued_at.pop(lid, turn_start)
+            lesson = self.store.lesson(lid)
+            self.measure(lesson, "queue_wait_seconds", max(0, turn_start - queued))
+            lesson.metrics["worker_turns"] = lesson.metrics.get("worker_turns", 0) + 1
+            self.store.save(lesson)
             try:
                 check_cancel(self.cancel_flags[lid])
                 requeue = await self.advance(lid)
@@ -202,12 +237,24 @@ class Jobs:
                             short.status, short.error = "failed", error
                     self.store.save(lesson)
             finally:
+                # Use the latest authoritative copy, including cancellation/failure.
+                lesson = self.store.lesson(lid)
+                self.measure(lesson, "active_processing_seconds", time.monotonic() - turn_start)
+                active_seconds = lesson.metrics["active_processing_seconds"]
+                if active_seconds:
+                    # Conservative uncached output over ALL active work, including
+                    # plans, failed attempts and cache checks (never queue/downtime).
+                    lesson.metrics["uncached_output_per_active_second"] = lesson.metrics.get("uncached_media_seconds", 0) / active_seconds
+                self.store.save(lesson)
+                self.current_short.pop(lid, None)
+                self.turn_started.pop(lid, None)
                 self.queue.task_done()
                 if requeue and not self.closing and not self.cancel_flags[lid].is_set():
-                    self.enqueue(lid, 10)
+                    self.enqueue(lid)
                 else:
                     self.active.discard(lid)
                     self.cancel_flags.pop(lid, None)
+                    self.accepted_at.pop(lid, None)
 
     async def stage(self, lesson, name, short=None, status=None):
         check_cancel(self.cancel_flags[lesson.id])
@@ -311,11 +358,14 @@ class Jobs:
         try:
             return await asyncio.to_thread(function, *args)
         finally:
+            elapsed = time.monotonic() - started
+            name = getattr(function, "__name__", getattr(getattr(function, "func", None), "__name__", "provider"))
+            self.measure(lesson, f"{name}_seconds", elapsed)
             if state:
-                state.work_seconds += time.monotonic() - started
-                self.store.save(lesson)
+                state.work_seconds += elapsed
+            self.store.save(lesson)
 
-    def generate(self, lesson, contract, task, cancel, validate=None):
+    def generate(self, lesson, contract, task, cancel, validate=None, *, metric=None):
         """Reserve worst-case schema attempts; retries cannot reset local work."""
         state = lesson.planning if lesson else None
         if state:
@@ -327,8 +377,13 @@ class Jobs:
         try:
             return self.model.generate(contract, task, cancel, validate)
         finally:
-            if state:
-                state.work_seconds += time.monotonic() - started
+            elapsed = time.monotonic() - started
+            if lesson is not None:
+                name = metric or {"LessonPlan": "plan" if task.get("phase") == "core" else "continuation_plan",
+                                  "ModelStoryboard": "draft", "SupportCheck": "review", "CandidateRanking": "ranking"}.get(contract.__name__, "model")
+                self.measure(lesson, f"{name}_seconds", elapsed)
+                if state:
+                    state.work_seconds += elapsed
                 self.store.save(lesson)
 
     def speech_profile(self, lesson):
@@ -456,6 +511,7 @@ class Jobs:
             # Ranking only improves the choice. Keep YouTube's order when the model cannot rank.
             return [s for _,s in fetched][:KEEP]
         check_cancel(cancel)
+        lesson.metrics["ranking_cache_hits"] = lesson.metrics.get("ranking_cache_hits", 0) + int(bool(cached))
         if not cached:
             self.store.cache_put(key,ranking.model_dump())
         lesson.video_rankings.extend(ranking.scores)
@@ -487,7 +543,7 @@ class Jobs:
                     raise AppError("TEACHING_QUALITY_FAILED" if teaching_failure else "UNSUPPORTED_CLAIM",
                                    "The bounded teaching review rejected this short. Retry or use a more focused learning goal." if teaching_failure else "The model source review could not support this short. Retry or use a more focused learning goal.", 422) from exc
                 retry={**task,"task":task["task"]+" A reviewer rejected the previous version: "+str(exc)[:400]+" Fix that problem."}
-                draft = attach_evidence(await asyncio.to_thread(self.generate, lesson, ModelStoryboard, retry, cancel, valid), segments)
+                draft = attach_evidence(await asyncio.to_thread(self.generate, lesson, ModelStoryboard, retry, cancel, valid, metric="repair"), segments)
         return draft
 
     def cache_draft(self, key, draft, short):
@@ -567,6 +623,7 @@ class Jobs:
             if measured != short.measured_duration_ms or [(u.start_ms, u.end_ms) for u in units] != [(u.start_ms, u.end_ms) for u in short.narration_units]:
                 raise AppError("MEDIA_REPAIR_TIMING", "The repaired voice no longer matches the published timeline. Restore the original speech provider/settings; ready content is unchanged.", 422)
             short.audio_path = audio
+            required_media(short, self.settings.data, self.assets)
             short.status = "ready"
             Short.model_validate(short.model_dump())
             refresh(lesson)
@@ -580,6 +637,8 @@ class Jobs:
             if short.curriculum_role == "closing" and not short.optional:
                 short.target_duration_ms = max(useful_minimum(lesson), min(40000, candidate_capacity(lesson, short)))
             self.store.save(lesson)
+        self.current_short[lid] = short
+        preparation_start = time.monotonic()
         index = lesson.shorts.index(short)
         objective = objective_for(lesson, short)
         example = next((e for e in lesson.examples if e.id == short.example_id), None)
@@ -709,7 +768,7 @@ class Jobs:
                     raise
                 task["target_words"] = repair_words
                 task["task"] += " " + exc.message + f" Shorten to about {repair_words} words. Repair only this unpublished activity, not any ready content."
-                draft = attach_evidence(await asyncio.to_thread(self.generate, lesson, ModelStoryboard, task, cancel, valid), segments)
+                draft = attach_evidence(await asyncio.to_thread(self.generate, lesson, ModelStoryboard, task, cancel, valid, metric="repair"), segments)
                 draft = await self.reviewed(draft, task, segments, valid, cancel, short, lesson)
                 self.cache_draft(short_key, draft, short)
         else:
@@ -745,19 +804,36 @@ class Jobs:
                 raise AppError("BUDGET_EXCEEDED", str(exc), 422) from exc
         # Validate the final playback object before the atomic store publication.
         Short.model_validate(short.model_dump())
+        required_media(short, self.settings.data, self.assets)
         short.error = None
         short.cache_hit = bool(cached and audio_cached)
         short.provider_settings = dict(lesson.provider_settings)
         refresh(lesson)
         if lesson.planned_duration_ms > lesson.request.time_budget_seconds * 1000 + lesson.extra_allowance_ms:
             raise AppError("BUDGET_EXCEEDED", "The measured lesson exceeds the approved time budget.", 422)
-        elapsed = time.time() - lesson.job.created_at
-        short.timings["ready_after_seconds"] = elapsed
-        if index == 0:
+        elapsed = max(0, time.time() - lesson.job.created_at)
+        short.timings["ready_after_seconds"] = elapsed  # legacy session elapsed, includes retry gaps
+        short.timings["published_at"] = time.time()
+        if lid in self.accepted_at:
+            short.timings["published_after_monotonic_seconds"] = time.monotonic() - self.accepted_at[lid]
+        preparation_seconds = time.monotonic() - preparation_start
+        short.timings["preparation_seconds"] = preparation_seconds
+        short.timings["draft_cache_hit"] = int(bool(cached))
+        short.timings["audio_cache_hit"] = int(bool(audio_cached))
+        cache_class = "fully_cached" if cached and audio_cached else "partially_cached" if cached or audio_cached else "uncached"
+        self.measure(lesson, f"{cache_class}_preparation_seconds", preparation_seconds)
+        lesson.metrics[f"{cache_class}_media_seconds"] = lesson.metrics.get(f"{cache_class}_media_seconds", 0) + duration / 1000
+        uncached_seconds = lesson.metrics.get("uncached_preparation_seconds", 0)
+        if uncached_seconds:
+            lesson.metrics["successful_short_uncached_media_production_rate"] = lesson.metrics.get("uncached_media_seconds", 0) / uncached_seconds
+        if "first_playable_seconds" not in lesson.metrics:
             lesson.metrics["first_playable_seconds"] = elapsed
-        else:
-            preceding = sum(s.measured_duration_ms + (20000 if s.question else 0) for s in lesson.shorts[:index]) / 1000
-            lesson.metrics[f"waiting_before_short_{index + 1}_seconds"] = max(0, elapsed - lesson.metrics.get("first_playable_seconds", elapsed) - preceding)
+            lesson.metrics["first_playable_session_elapsed_seconds"] = elapsed
+            lesson.metrics["first_playable_active_seconds"] = lesson.metrics.get("active_processing_seconds", 0) + time.monotonic() - self.turn_started.get(lid, preparation_start)
+            if lid in self.accepted_at:
+                lesson.metrics["first_playable_monotonic_seconds"] = time.monotonic() - self.accepted_at[lid]
+        # Retire misleading waiting_before_short_N metrics. Offline one-pass
+        # simulation now accounts for prior stalls and excludes practice credit.
         record_coverage(lesson, short)
         if lesson.planning:
             entry = next((e for e in lesson.planning.coverage if e.concept_id == short.concept_id), None)

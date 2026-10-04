@@ -79,31 +79,31 @@ def create_app(settings=None, model=None, speech=None, youtube=None):
 
     @app.get("/api/lessons", response_model=list[Lesson])
     def lessons():
-        return store.history()
+        return [jobs.present(lesson) for lesson in store.history()]
 
     @app.post("/api/lessons", response_model=Lesson, status_code=202)
     async def create(body: LearningRequest):
-        return jobs.create(body)
+        return jobs.present(jobs.create(body))
 
     @app.get("/api/lessons/{lid}", response_model=Lesson)
     def snapshot(lid: str):
-        return store.lesson(lid)
+        return jobs.present(store.lesson(lid))
 
     @app.post("/api/lessons/{lid}/cancel", response_model=Lesson)
     async def cancel(lid: str):
-        return jobs.cancel(lid)
+        return jobs.present(jobs.cancel(lid))
 
     @app.post("/api/lessons/{lid}/retry", response_model=Lesson, status_code=202)
     async def retry(lid: str):
-        return jobs.retry(lid)
+        return jobs.present(jobs.retry(lid))
 
     @app.post("/api/lessons/{lid}/shorts/{sid}/explanations", response_model=Lesson, status_code=202)
     async def explanation(lid: str, sid: str, body: ExplanationRequest):
-        return jobs.explain(lid, sid, body)
+        return jobs.present(jobs.explain(lid, sid, body))
 
     @app.get("/api/lessons/{lid}/events")
     async def events(lid: str, request: Request, after: int = 0):
-        lesson = store.lesson(lid)
+        lesson = jobs.present(store.lesson(lid))
         try:
             cursor = max(0, int(request.headers.get("last-event-id", str(after))))
         except ValueError:
@@ -116,7 +116,7 @@ def create_app(settings=None, model=None, speech=None, youtube=None):
                 for seq, body in rows:
                     cursor = seq
                     yield f"id: {seq}\nevent: progress\ndata: {json.dumps(body)}\n\n"
-                current = store.lesson(lid)
+                current = jobs.present(store.lesson(lid))
                 if current.job.status in {"complete", "failed", "cancelled", "interrupted"} and cursor >= current.job.event_sequence:
                     yield f"event: done\ndata: {current.model_dump_json()}\n\n"
                     return

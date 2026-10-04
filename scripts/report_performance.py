@@ -1,31 +1,71 @@
+"""Summarise a benchmark file without inventing hardware, cache state or p95."""
+import argparse
 import json
 import statistics
 from pathlib import Path
-root=Path(__file__).resolve().parents[1]
-data=json.loads((root/'docs/performance-runs.json').read_text())
-runs=data['runs'];warm=[r for r in runs if r['kind']=='warm_uncached'];settings=runs[0]['settings']
-def f(v):return '—' if v is None else f'{v:.3f}'
-lines=['# Measured local performance','', 'Measured on 4 October 2026, on an Apple M5 Pro with 48 GB unified memory. This is a small sample on one computer. It is not a general hardware promise.','',
-'## Method','', 'One cold run, five warm uncached runs, and one cached run. The cold run used a new API process, a new Kokoro pipeline, and an unloaded Ollama model. Setup downloads and the operating system file cache were outside that cold measure. Each uncached run used the same original transcript under a distinct source identity. No other language-model requests ran during these measurements. Browser control tests ran briefly during the cold run.','',
-'The goal requested three learning points: compare a scan with an index, explain lookup, and show an email example. The original budget was 300 seconds. Each run completed three ready shorts and a question. The worker published shorts separately. The measured planned content was about 69 seconds including a 20-second question allowance. Learner pauses are outside this content budget.','',
-'## Individual results','', '| Run | Accept (s) | Import (s) | Plan (s) | First playable (s) | All ready (s) | Longest derived wait (s) | Result |','| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |']
-for i,r in enumerate(runs):
-    waits=[v for k,v in r['metrics'].items() if k.startswith('waiting_before')]
-    name='Cold' if r['kind']=='cold' else 'Cached' if r['kind']=='cached' else f'Warm {i}'
-    lines.append(f"| {name} | {f(r['accepted_seconds'])} | {f(r['import_seconds'])} | {f(r['metrics'].get('planning_seconds'))} | {f(r['metrics'].get('first_playable_seconds'))} | {f(r['metrics'].get('total_preparation_seconds'))} | {f(max(waits,default=0))} | {r['status']} |")
-lines+=['','Wait is derived from actual publish times and measured audio lengths, assuming immediate continuous playback and the planned 20-second question allowance. It is not a recording of a person’s pauses. A ready short does not wait for later generation.','', '## Five warm uncached runs','', '| Measure | Median (s) | Maximum (s) |','| --- | ---: | ---: |']
-for label,key in [('Accepted request','accepted_seconds'),('Source import','import_seconds'),('Provider readiness','provider_load_seconds'),('Source retrieval','source_acquisition_seconds'),('Planning','planning_seconds'),('First playable short','first_playable_seconds'),('Total preparation','total_preparation_seconds')]:
-    vals=[r[key] if key in r else r['metrics'][key] for r in warm]
-    lines.append(f'| {label} | {f(statistics.median(vals))} | {f(max(vals))} |')
-for label,key in [('Model generation, all shorts','generation_seconds'),('Model source review, all shorts','validation_seconds'),('Speech, all shorts','speech_seconds')]:
-    vals=[r['stage_timings'][key] for r in warm];lines.append(f'| {label} | {f(statistics.median(vals))} | {f(max(vals))} |')
-lines+=['', 'No p95 is reported for five warm samples. Import and retrieval are separate from provider loading. Model generation is the main preparation cost. Each short’s stage and ready times are saved in the raw report.','',
-'## Targets','', 'The accepted request returned its saved job in less than one second in every measured run. Every warm run made the first playable short ready within 30 seconds. Later shorts were usually ready before their expected playback start. Two runs had a derived wait; see the table. The strict target of no waiting did not pass every run. These measurements cover this sample, this model, and this voice.','',
-'## Exact providers','', f"- Ollama runtime: 0.35.1, loopback, cloud disabled, one parallel task. Model: `{settings['model']}`. Quantization: `{settings.get('quantization')}`.", f"- Model digest: `{settings['digest']}`.", f"- Context: {settings['context']} tokens. Output limit: {settings['num_predict']} tokens. Temperature: {settings['temperature']}. Seed: {settings['seed']}. Thinking: {settings['think']}. Prompt version: {settings['prompt_version']}. Schema version: {settings['schema_version']}.",
-f"- Speech: Kokoro 0.9.4 / Misaki 0.9.4, CPU, voice `{settings['speech']['voice']}`, speed 1, 24 kHz mono PCM WAV. No system voice substitute was used.", f"- Speech model revision: `{settings['speech']['model_revision']}`.",f"- Voice SHA-256: `{settings['speech']['voice_sha256']}`.", '',
-'## Quality and limits','', 'Earlier tests exposed invalid model references and an unsupported paraphrased claim. The final implementation uses constrained source excerpts and template-generated cues. The earlier measurements are retained in `development-runs/`. They are not included in the final median. Manual review covers the final comparison, worked example, and process clip; see `validation.md`.','',
-'Qwen3 8B passed the final original-sample checks with these constrained contracts. This does not establish quality for every imported source or learning goal. No larger model was installed or compared. General paraphrasing is outside this release after the source review failure. Some sample shorts are about 16–18 seconds, below the preferred 20–40 second range. They use fixed natural speech speed and stay below the 40-second maximum.','',
-'## Workload and cost','', 'The model download is 5,225,388,164 bytes. Kokoro model and voice files are about 327 MB and 510 KB. Local runtime, environment, cache, and media use are in `workload.json`. That snapshot is not a peak memory or energy measurement. Ollama reports its model allocation separately from the API process. GPU shared memory and total operating system pressure were not independently profiled.','',
-'Local inference, local speech, and SVG playback have no metered cloud generation fee in this build. Hardware, electricity, storage, setup time, and any optional source-service charges remain costs. Electricity and money costs were not measured.','', 'Raw measurements: [performance-runs.json](performance-runs.json).']
-(root/'docs/performance.md').write_text('\n'.join(lines)+'\n')
-print('Warm first playable median:',statistics.median(r['metrics']['first_playable_seconds'] for r in warm))
+
+ROOT = Path(__file__).resolve().parents[1]
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--input', required=True)
+    parser.add_argument('--output', default='docs/readiness-measurements.md')
+    args = parser.parse_args()
+    data = json.loads((ROOT / args.input).read_text()); runs = data['runs']
+    mode = data.get('mode', 'legacy')
+    lines = ['# Readiness measurements', '', f'Mode: **{mode}**. Raw data: [{Path(args.input).name}]({Path(args.input).name}).', '',
+             data.get('note', 'Legacy input: cache/throughput assumptions require manual review.'), '',
+             'These are synthetic **one-pass** stalls, not observed interactive stalls. The player loops until navigation. '
+             'No question allowance, replay, or generation wait is counted as useful media.', '',
+             f'Experimental startup buffer: {data.get("experimental_buffer_seconds", 0)} seconds; not a UI default.', '',
+             '| Case | Budget (s) | Result | Startup (s) | Sequential stalls (s) | Ready-ahead at starts (s) |',
+             '| --- | ---: | --- | ---: | ---: | --- |']
+    for run in runs:
+        simulation = run.get('synthetic_one_pass', {})
+        startup = simulation.get('startup_seconds')
+        stalls = simulation.get('stalls_seconds', [])
+        ahead = ', '.join(f'{value / 1000:.1f}' for value in simulation.get('ready_ahead_ms', []))
+        first = '—' if startup is None else f'{startup:.3f}'
+        lines.append(f'| {run["kind"]} | {run.get("budget_seconds", "—")} | {run["status"]} | {first} | {sum(stalls):.3f} | {ahead} |')
+    if data.get('experimental_buffer_seconds', 0):
+        lines += ['', '## Experimental initial preparation trade-off', '',
+                  '| Case | Threshold reached (s) | Buffered startup (s) | Subsequent synthetic stalls (s) |',
+                  '| --- | ---: | ---: | ---: |']
+        for run in runs:
+            experimental = run.get('experimental_buffer', {})
+            reached = experimental.get('experimental_buffer_reached_seconds')
+            start = experimental.get('startup_seconds')
+            lines.append(f'| {run["kind"]} | {"not reached" if reached is None else f"{reached:.3f}"} | {"—" if start is None else f"{start:.3f}"} | {sum(experimental.get("stalls_seconds", [])):.3f} |')
+    if mode == 'fixture':
+        lines += ['', 'The fixture publication intervals are 5, 10, and 15 seconds for 10-second media. '
+                  'They exercise production faster than, equal to, and slower than consumption; they do not demonstrate a provider speed improvement.']
+    if mode == 'live':
+        lines += ['', '## Hardware and provider observations', '', '```json', json.dumps(data.get('hardware', {}), indent=2), '```', '',
+                  'Cache state is operator-declared; inspect actual acquisition and per-short draft/audio cache hits in the raw file. '
+                  'The raw file retains exact model/voice fingerprints and settings for each run.', '',
+                  '## Active production and stage breakdown', '',
+                  '| Lesson | First playable active (s) | Active work (s) | Queue wait (s) | Uncached output / active second |',
+                  '| --- | ---: | ---: | ---: | ---: |']
+        def value(metrics, key):
+            return f'{metrics[key]:.3f}' if key in metrics else '—'
+        for run in runs:
+            m = run.get('metrics', {})
+            lines.append(f'| {run["lesson_id"]} | {value(m, "first_playable_active_seconds")} | {value(m, "active_processing_seconds")} | {value(m, "queue_wait_seconds")} | {value(m, "uncached_output_per_active_second")} |')
+        lines += ['', 'Stage totals in seconds (including failed attempts where instrumentation persisted):', '',
+                  '| Lesson | Search | Transcript | Ranking | Plan | Continuation plan | Draft | Review | Repair | Speech |',
+                  '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |']
+        for run in runs:
+            metrics = run.get('metrics', {})
+            vals = [value(metrics, f'{name}_seconds') for name in ('search', 'transcript', 'ranking', 'plan', 'continuation_plan', 'draft', 'review', 'repair', 'synthesize')]
+            lines.append('| ' + run['lesson_id'] + ' | ' + ' | '.join(vals) + ' |')
+        successful = [r for r in runs if r['status'] == 'complete']
+        first = [r['synthetic_one_pass']['startup_seconds'] for r in successful if r.get('synthetic_one_pass', {}).get('startup_seconds') is not None]
+        if first:
+            lines += ['', f'Completed samples: {len(first)}. Startup median {statistics.median(first):.3f}s; maximum {max(first):.3f}s.']
+    lines += ['', 'No p95 is inferred from this sample. No universal zero-wait guarantee or release throughput threshold is established. '
+              'Peak CPU/GPU/memory, interactive stalls, and live cancellation/recovery still require target-hardware evaluation.']
+    output = ROOT / args.output; output.parent.mkdir(parents=True, exist_ok=True); output.write_text('\n'.join(lines) + '\n')
+    print('Summary saved:', output)
+
+if __name__ == '__main__':
+    main()

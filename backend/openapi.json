@@ -1866,6 +1866,16 @@
       },
       "Lesson": {
         "properties": {
+          "readiness": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Readiness"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "planning": {
             "anyOf": [
               {
@@ -2530,6 +2540,40 @@
           "evidence"
         ],
         "title": "Question"
+      },
+      "Readiness": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "const": 1,
+            "title": "Version",
+            "default": 1
+          },
+          "ready_short_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Ready Short Ids",
+            "default": []
+          },
+          "missing_media_short_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing Media Short Ids",
+            "default": []
+          },
+          "initial_contiguous_media_ms": {
+            "type": "integer",
+            "title": "Initial Contiguous Media Ms",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "Readiness"
       },
       "SavedLearningRequest": {
         "properties": {

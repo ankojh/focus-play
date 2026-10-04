@@ -99,13 +99,25 @@ FOCUS_LIVE=1 npm test --prefix frontend -- tests/live.spec.ts
 
 The Python tests use explicit test providers. The browser checks use explicit API and audio fixtures. See [storyboard implementation and compatibility](docs/storyboards.md) for the versioned format, measured compiler cost, screenshots, and live-quality limitations. Regenerate the shared storyboard playback fixture with `.venv/bin/python scripts/export_storyboard_fixture.py` after changing its authoring fixture or compiler. They do not establish live source access, model quality, or speech performance. See [YouTube change checks](docs/youtube-source-change.md) for current results and the remaining live-check dependency. [Earlier validation](docs/validation.md) and [earlier performance measurements](docs/performance.md) describe the previous imported-source version. See [design and limitations](docs/design.md) for the current flow.
 
-To measure the current YouTube flow, start all providers and configure the server key:
+Readiness now includes durable required audio/images, contiguous remaining media, fair serial worker turns, and a bounded two-short browser preload window. Playback still loops until navigation and is never gated on a startup buffer. See [readiness design, metrics, privacy and limitations](docs/playback-readiness.md).
+
+For reproducible scheduler/consumption fixtures (no source credits):
 
 ```sh
-.venv/bin/python scripts/benchmark.py
+.venv/bin/python scripts/benchmark.py --mode fixture --buffer-seconds 60
+.venv/bin/python scripts/report_performance.py --input docs/readiness-fixture-runs.json
 ```
 
-The script repeats the same YouTube goal with new request IDs. It records actual source acquisition, provider settings, errors, and per-short cache flags. Repeats can reuse search, captions, plans, and audio. These are not forced uncached or cold measurements. The output is separate from the earlier imported-source measurements. Do not run other generation tasks during this check.
+To measure the current YouTube flow, first approve source credits, start local providers, configure both server keys, and verify the cache state. For example, a repeat/cache-reuse evaluation:
+
+```sh
+.venv/bin/python scripts/benchmark.py --mode live --approve-source-credits \
+  --cache-state partially-cached --budgets 120 300 600 1200 --runs 1
+.venv/bin/python scripts/report_performance.py --input docs/readiness-live-runs.json \
+  --output docs/readiness-live-measurements.md
+```
+
+Cache labels are operator declarations, not forced by the script; inspect actual stage hits. The script creates new request IDs and records acquisition calls, exact provider settings, errors, duration ledgers, stage/cache metrics, and explicitly synthetic one-pass stalls (not observed looping-player stalls). Reports are separate from historical imported-source results. Live source acquisition may cost credits. Do not run other generation tasks during this check.
 
 ## Downloads and licences
 

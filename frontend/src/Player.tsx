@@ -5,16 +5,17 @@ import { duration, restore } from './api';
 import { Visual } from './Visual';
 import { Captions, Transcript } from './Captions';
 import { atTime, timelineError } from './playback';
-export function Player({short, lessonId, previous, next, onPrevious, onNext, autoplay, onAudioError, onSources, sourcesVisible}: {short: Short; lessonId: string; previous: boolean; next: boolean; onPrevious: ()=>void; onNext: ()=>void; autoplay: boolean; onAudioError:()=>void; onSources:()=>void; sourcesVisible:boolean}) {
+export function Player({short, lessonId, previous, next, onPrevious, onNext, autoplay, onAudioError, onPosition, onSources, sourcesVisible}: {short: Short; lessonId: string; previous: boolean; next: boolean; onPrevious: ()=>void; onNext: ()=>void; autoplay: boolean; onAudioError:()=>void; onPosition:(shortId:string,positionMs:number)=>void; onSources:()=>void; sourcesVisible:boolean}) {
   const audio = useRef<HTMLAudioElement>(null);
   const [time,setTime] = useState(0), [playing,setPlaying]=useState(false), [error,setError]=useState(''), [answered,setAnswered]=useState<number|null>(null), [ended,setEnded]=useState(false);
   const [muted,setMuted]=useState(false), [reaction,setReaction]=useState<'like'|'dislike'|null>(null);
   const [captionsVisible,setCaptionsVisible]=useState(true);
-  const lastSave = useRef(0), pendingSeek = useRef<number|null>(null);
+  const lastSave = useRef(0), pendingSeek = useRef<number|null>(null), lastPosition=useRef(0);
+  const reportPosition=()=>{if(audio.current){lastPosition.current=performance.now();onPosition(short.id,audio.current.currentTime*1000);}};
   const shortsView = useRef<HTMLDivElement>(null), touchStart = useRef<{x:number;y:number}|null>(null);
   const key = `playback:${lessonId}:${short.id}`;
   const navigation = useRef({previous,next,onPrevious,onNext});navigation.current={previous,next,onPrevious,onNext};
-  useEffect(()=>{ setTime(autoplay?0:restore(key,0));setPlaying(false);setError('');setAnswered(restore(`answer:${key}`,null));setReaction(restore(`reaction:${key}`,null));setEnded(false);lastSave.current=0;pendingSeek.current=null; },[key]);
+  useEffect(()=>{ setTime(autoplay?0:restore(key,0));setPlaying(false);setError('');setAnswered(restore(`answer:${key}`,null));setReaction(restore(`reaction:${key}`,null));setEnded(false);lastSave.current=0;pendingSeek.current=null;lastPosition.current=0;onPosition(short.id,autoplay?0:restore(key,0)); },[key]);
   useEffect(()=>{const current=audio.current;return()=>current?.pause();},[key]);
   useEffect(()=>{
     const view=shortsView.current;if(!view)return;
@@ -62,7 +63,7 @@ export function Player({short, lessonId, previous, next, onPrevious, onNext, aut
       <Captions text={unit?.text} visible={captionsVisible}/>
       <div className="player-bottom"><span className="channel-avatar"><Play size={16} fill="currentColor"/></span><div><strong>@focusplay</strong><span>Local voice · Your sources</span></div><span className="channel-badge">Learning</span></div>
       <div className="controls"><div className="control-row"><span className="time-readout">{duration(time)} <span>/ {duration(short.measured_duration_ms)}</span></span><span>Local narration</span></div><input aria-label="Seek within short" type="range" min="0" max={short.measured_duration_ms} value={Math.min(time,short.measured_duration_ms)} step="100" style={{'--played':`${Math.min(100,time/short.measured_duration_ms*100)}%`} as React.CSSProperties} onChange={e=>seek(Number(e.target.value))}/></div>
-      <audio key={key} ref={audio} src={`/api/audio/${short.audio_path}`} preload="auto" loop muted={muted} onLoadedMetadata={()=>{const a=audio.current!;a.currentTime=Math.min((pendingSeek.current??(autoplay?0:restore(key,0)))/1000,a.duration);pendingSeek.current=null;if(a.currentTime>=a.duration-.1)setEnded(true);if(autoplay)play();}} onPlay={()=>setPlaying(true)} onPause={()=>{setPlaying(false);if(audio.current){setTime(audio.current.currentTime*1000);localStorage.setItem(key,JSON.stringify(audio.current.currentTime*1000));}}} onSeeked={()=>{const t=(audio.current?.currentTime??0)*1000;setTime(t);localStorage.setItem(key,JSON.stringify(t));lastSave.current=t;pendingSeek.current=null;}} onEnded={()=>{setEnded(true);const a=audio.current;if(a){a.currentTime=0;setTime(0);play();}}} onError={()=>{setError('The audio file could not load. Check the local server or repair the audio.');onAudioError();}}/>
+      <audio key={key} ref={audio} src={`/api/audio/${short.audio_path}`} preload="auto" loop muted={muted} onTimeUpdate={()=>{if(performance.now()-lastPosition.current>=1000)reportPosition();}} onLoadedMetadata={()=>{const a=audio.current!;a.currentTime=Math.min((pendingSeek.current??(autoplay?0:restore(key,0)))/1000,a.duration);pendingSeek.current=null;reportPosition();if(a.currentTime>=a.duration-.1)setEnded(true);if(autoplay)play();}} onPlay={()=>setPlaying(true)} onPause={()=>{setPlaying(false);reportPosition();if(audio.current){setTime(audio.current.currentTime*1000);localStorage.setItem(key,JSON.stringify(audio.current.currentTime*1000));}}} onSeeked={()=>{const t=(audio.current?.currentTime??0)*1000;setTime(t);localStorage.setItem(key,JSON.stringify(t));lastSave.current=t;pendingSeek.current=null;reportPosition();}} onEnded={()=>{setEnded(true);const a=audio.current;if(a){a.currentTime=0;setTime(0);play();}}} onError={()=>{setError('The audio file could not load. Check the local server or repair the audio.');onAudioError();}}/>
     </div>
     <div className="short-actions" aria-label="Short actions">
       <button aria-label="Like short" aria-pressed={reaction==='like'} onClick={()=>react('like')}><span><ThumbsUp size={24}/></span><small>Like</small></button>

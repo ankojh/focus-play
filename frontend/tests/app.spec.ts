@@ -328,6 +328,81 @@ test('settled arrows and paused instructional states do not move; role changes r
   await page.waitForTimeout(250);expect(await page.locator('.diagram').evaluate(e=>e.outerHTML)).toBe(markup);
 });
 
+test('ready-ahead is contiguous, excludes practice, and updates on seek and jumps',async({page})=>{
+  const lesson=makeLesson();lesson.shorts.push(makeShort('three'));lesson.short_ids.push('three');lesson.shorts[1].status='queued';lesson.shorts[0].question_required=true;
+  await mock(page,lesson);await start(page);
+  await expect(page.getByTestId('ready-ahead')).toContainText('Next 0 shorts ready');await expect(page.getByTestId('ready-ahead')).toContainText('0:30 contiguous');
+  await expect(page.getByTestId('client-preload')).toContainText('browser: 0');await expect(page.getByRole('button',{name:'Next short',exact:true})).toBeDisabled();
+  await seekAudio(page,20000);await expect(page.getByTestId('ready-ahead')).toContainText('0:10 contiguous');
+  await page.locator('.outline-item').nth(2).click();await expect(page.locator('.player h2')).toHaveText('Understand an index three');await expect(page.getByTestId('ready-ahead')).toContainText('0:30 contiguous');
+  await expect(page.getByRole('button',{name:'Previous short',exact:true})).toBeDisabled();
+});
+
+test('preload window is bounded to two ready shorts and releases blobs on selection and exit',async({page})=>{
+  await page.addInitScript(()=>{
+    const original=URL.createObjectURL,release=URL.revokeObjectURL,fetchOriginal=window.fetch;
+    const stats={created:0,released:0,requests:[] as string[]};(window as any).preloadStats=stats;
+    URL.createObjectURL=blob=>{stats.created++;return original(blob);};URL.revokeObjectURL=url=>{stats.released++;release(url);};
+    window.fetch=(input,init)=>{if(String(input).includes('/api/audio/'))stats.requests.push(String(input));return fetchOriginal(input,init);};
+  });
+  const lesson=makeLesson();lesson.shorts.push(makeShort('three'),makeShort('four'));lesson.short_ids.push('three','four');lesson.shorts.forEach((s,i)=>s.audio_path=`${'abcd'[i].repeat(64)}.wav`);
+  await mock(page,lesson);await start(page);await expect(page.getByTestId('client-preload')).toContainText('browser: 2');
+  let stats=await page.evaluate(()=>(window as any).preloadStats);expect(stats.requests).toHaveLength(2);expect(stats.requests.some((s:string)=>s.includes('d'.repeat(64)))).toBe(false);
+  await page.getByRole('button',{name:'Next short',exact:true}).click();await expect(page.getByTestId('client-preload')).toContainText('browser: 2');
+  await expect.poll(()=>page.evaluate(()=>(window as any).preloadStats.released)).toBeGreaterThanOrEqual(2);
+  await page.getByRole('button',{name:'Library',exact:true}).click();await expect.poll(()=>page.evaluate(()=>{const s=(window as any).preloadStats;return s.created-s.released;})).toBe(0);
+});
+
+test('explicit unready selection waits for that short without skipping and records only local observed wait',async({page})=>{
+  const lesson=makeLesson();lesson.shorts[1].status='queued';lesson.job.status='running';lesson.status='partially_ready';
+  const state=await mock(page,lesson);await start(page);await page.locator('.outline-item').nth(1).click();
+  await expect(page.locator('.preparing-player h2')).toHaveText('Preparing the short you selected.');await expect(page.locator('.outline-item.current')).toContainText('Understand an index two');
+  lesson.shorts[1].status='ready';lesson.job.event_sequence=5;
+  await expect(page.locator('.player h2')).toHaveText('Understand an index two',{timeout:10000});expect(state.creates()).toBe(1);
+  const waits=await page.evaluate(()=>JSON.parse(localStorage.getItem('focusplay:requested-waits:v1')||'[]'));
+  expect(waits).toHaveLength(1);expect(waits[0].outcome).toBe('ready');expect(waits[0].seconds).toBeGreaterThan(0);expect(waits[0]).not.toHaveProperty('goal');
+  await expect(page.locator('audio')).toHaveAttribute('loop','');
+});
+
+test('stale and duplicate snapshots cannot downgrade ready content or reset selection',async({page})=>{
+  const lesson=makeLesson();lesson.job.status='running';lesson.status='partially_ready';await mock(page,lesson);await start(page);
+  await page.getByRole('button',{name:'Next short',exact:true}).click();await expect(page.locator('.player h2')).toHaveText('Understand an index two');
+  const handle=await page.locator('audio').elementHandle();lesson.shorts[1].status='queued';lesson.job.event_sequence=3;
+  const snapshot=async(sequence:number)=>{await page.waitForResponse(async response=>response.url().endsWith('/api/lessons/lesson_test') && (await response.json()).job.event_sequence===sequence);await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));};
+  await snapshot(3);await expect(page.locator('.player h2')).toHaveText('Understand an index two');
+  lesson.job.event_sequence=4;await snapshot(4);expect(await handle!.evaluate(a=>a.isConnected)).toBe(true);await expect(page.locator('.player h2')).toHaveText('Understand an index two');
+});
+
+test('essential upcoming images must decode before client preload is reported ready',async({page})=>{
+  const lesson=makeLesson();const mixed=JSON.parse(readFileSync(new URL('../../fixtures/mixed-visuals.json',import.meta.url),'utf8'));
+  lesson.shorts[1]={...mixed.shorts[2],id:'two',audio_path:'b'.repeat(64)+'.wav'};
+  await mock(page,lesson);await start(page);
+  await expect(page.getByTestId('ready-ahead')).toContainText('Next 1 short ready');
+  // The mock deliberately has no asset route: missing image must not be hidden by ready audio.
+  await expect(page.getByTestId('client-preload')).toContainText('could not be preloaded');await expect(page.getByTestId('client-preload')).toContainText('browser: 0');
+});
+
+test('oversized media is not retained by speculative preload',async({page})=>{
+  const lesson=makeLesson();lesson.shorts[1].audio_path='b'.repeat(64)+'.wav';await mock(page,lesson);
+  await page.route(`**/api/audio/${'b'.repeat(64)}.wav`,route=>route.fulfill({contentType:'audio/wav',headers:{'Content-Length':'4000000'},body:Buffer.alloc(1)}));
+  await start(page);await expect(page.getByTestId('client-preload')).toContainText('could not be preloaded');await expect(page.getByTestId('client-preload')).toContainText('browser: 0');
+});
+
+test('server media loss prevents next preload and surfaces repair rather than an infinite wait',async({page})=>{
+  const lesson=makeLesson() as any;lesson.readiness={version:1,ready_short_ids:['one'],missing_media_short_ids:['two'],initial_contiguous_media_ms:30000};
+  await mock(page,lesson);await start(page);await expect(page.getByTestId('ready-ahead')).toContainText('Next 0 shorts ready');await expect(page.getByTestId('client-preload')).toContainText('browser: 0');
+  await expect(page.getByRole('alert')).toContainText('Published media is missing');await expect(page.getByRole('button',{name:'Repair missing media',exact:true})).toBeVisible();
+});
+
+test('cancel stops inflight prefetch and preserves completed playback',async({page})=>{
+  const lesson=makeLesson();lesson.job.status='running';lesson.status='partially_ready';lesson.shorts[1].audio_path='b'.repeat(64)+'.wav';
+  await mock(page,lesson);
+  let resolve:(()=>void)|undefined;const pending=new Promise<void>(done=>resolve=done);let requested=false;
+  await page.route(`**/api/audio/${'b'.repeat(64)}.wav`,async route=>{requested=true;await pending;await route.abort().catch(()=>{});});
+  await start(page);await expect.poll(()=>requested).toBe(true);await page.getByRole('button',{name:'Cancel preparation',exact:true}).click();
+  await expect(page.getByTestId('job-stage')).toHaveText('cancelled');resolve!();await expect(page.getByTestId('client-preload')).toContainText('browser: 0');await expect(page.locator('.player h2')).toHaveText('Understand an index one');
+});
+
 test('autoplay blocking is actionable and not a corrupt audio error',async({page})=>{
   await page.addInitScript(()=>{HTMLMediaElement.prototype.play=()=>Promise.reject(new DOMException('Blocked','NotAllowedError'));});
   await mock(page);await start(page);await page.getByRole('button',{name:'Play',exact:true}).click();

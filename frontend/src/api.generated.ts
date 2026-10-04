@@ -825,6 +825,7 @@ export interface components {
         };
         /** Lesson */
         Lesson: {
+            readiness?: components["schemas"]["Readiness"] | null;
             planning?: components["schemas"]["PlanningState"] | null;
             acquisition?: components["schemas"]["AcquisitionLedger"];
             duration_ledger?: components["schemas"]["DurationLedger"] | null;
@@ -1144,6 +1145,30 @@ export interface components {
              * @constant
              */
             allowance_ms: 20000;
+        };
+        /** Readiness */
+        Readiness: {
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version: 1;
+            /**
+             * Ready Short Ids
+             * @default []
+             */
+            ready_short_ids: string[];
+            /**
+             * Missing Media Short Ids
+             * @default []
+             */
+            missing_media_short_ids: string[];
+            /**
+             * Initial Contiguous Media Ms
+             * @default 0
+             */
+            initial_contiguous_media_ms: number;
         };
         /** SavedLearningRequest */
         SavedLearningRequest: {
