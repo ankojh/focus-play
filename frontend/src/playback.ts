@@ -62,7 +62,7 @@ export function diagramFrame(scene:Scene,time:number,reduced:boolean) {
     if(at>time)return 0;
     if(reduced)return 1;
     const next=actions.find(a=>a.at_ms>at && (!target || a.target===target))?.at_ms??scene.end_ms;
-    const span=Math.max(1,Math.min(650,next-at,scene.end_ms-at));
+    const span=Math.max(1,Math.min(180,next-at,scene.end_ms-at));
     // Tiny spoken beats snap rather than flashing through decorative effects.
     if(span<150)return 1;
     return Math.max(0,Math.min(1,(time-at)/span));

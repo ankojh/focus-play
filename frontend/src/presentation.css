@@ -1,0 +1,48 @@
+/* Shared renderer/player tokens. Keep identity accents separate from status colours. */
+:root{
+  --visual-background:#141b24;--visual-surface:#1b2430;--visual-selected:#263447;
+  --visual-separator:#69798d;--visual-text:#eef3f9;--visual-support:#c2cfde;
+  --visual-focus:#ffbf66;--focus-ring:#87bfff;--visual-error:#ffc3cc;
+  --visual-label-size:1rem;--visual-detail-size:.875rem;
+  --visual-space:1rem;--visual-radius:.75rem;--visual-transition:180ms;
+}
+.player{aspect-ratio:auto;max-width:440px;max-height:none;min-height:580px;overflow:visible;border:1px solid #394451;background:var(--visual-background);color:var(--visual-text)}
+.player-top{padding-bottom:4px}.player-top button{min-width:40px;min-height:40px}
+.short-title{padding:16px 18px 10px;overflow-wrap:anywhere}.player h2{font-size:1.375rem;line-height:1.35}.player-kicker{font-size:.6875rem;letter-spacing:.08em}
+.diagram-frame{flex:none;height:360px;min-height:260px;max-height:400px;overflow:auto;min-width:0;font-size:var(--visual-label-size);border-radius:var(--visual-radius);background:var(--visual-background);scrollbar-width:thin}
+.diagram{display:block;flex:none;min-height:0;margin:0;max-width:100%;font-family:Arial,sans-serif}
+.diagram-tag{fill:var(--visual-support);letter-spacing:.02em}.node-label{fill:var(--visual-text);font-weight:650}.node-detail{fill:var(--visual-support)}
+.visual-reader{touch-action:pan-y pinch-zoom;overscroll-behavior:contain;scrollbar-color:var(--visual-separator) transparent}
+.visual-reader:focus-visible,.player:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
+.shorts-view{touch-action:pan-x pinch-zoom}.shorts-view:has(.visual-reader){touch-action:auto}
+.shorts-view:has(.visual-reader) .visual-reader{touch-action:pan-y pinch-zoom}
+.caption-safe-area{flex-shrink:0;padding:12px 14px;min-width:0;height:8rem;display:flex;align-items:center}.caption-safe-area[hidden]{display:none}
+.captions{width:100%;margin:0;padding:12px;border-radius:var(--visual-radius);border:1px solid #485666;background:#0c121b;color:var(--visual-text);font-size:1rem;line-height:1.5;font-weight:400;text-shadow:none;text-align:left;overflow-wrap:anywhere;max-height:100%;overflow:auto;text-wrap:pretty}
+.caption-settings{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:16px auto 10px;max-width:460px;font-size:.875rem;color:var(--visual-support)}
+.caption-settings button{font-size:.875rem;min-height:40px}
+.short-transcript{max-width:460px;margin:0 auto;padding:14px;background:var(--visual-background);border:1px solid var(--visual-separator);border-radius:var(--visual-radius);font-size:1rem;line-height:1.6;overflow-wrap:anywhere}
+.short-transcript summary{cursor:pointer;min-height:28px}.short-transcript summary:focus-visible{outline:2px solid var(--focus-ring);outline-offset:3px}
+.short-transcript>.muted{font-size:.875rem;margin-top:12px;color:var(--visual-support)}
+.short-transcript ol{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:16px}
+.short-transcript li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:start}
+.transcript-time{color:var(--focus-ring);background:var(--visual-surface);border:1px solid var(--visual-separator);border-radius:6px;padding:6px;font-size:.875rem;min-height:40px;font-variant-numeric:tabular-nums}
+.controls{padding:0 14px 10px}.control-row{font-size:.75rem;padding:0 0 8px;gap:8px;flex-wrap:wrap}.controls input[type=range]{height:24px;border-radius:6px;background:linear-gradient(to right,var(--accent) 0,var(--accent) var(--played),#666 var(--played),#666 100%);background-size:100% 5px;background-repeat:no-repeat;background-position:center}
+.controls input[type=range]::-webkit-slider-thumb{width:16px;height:16px}.controls input[type=range]::-moz-range-thumb{width:16px;height:16px}
+.player-bottom{padding:0 14px 12px}.player-bottom div>span{font-size:.75rem}.player-bottom strong{font-size:.875rem}.player-type{font-size:.6875rem;letter-spacing:.05em}
+.short-actions small{font-size:.75rem}.keyboard-note{font-size:.75rem}.answers button{font-size:.875rem}.answers button.selected svg{flex-shrink:0}
+.lesson-heading h1{display:block;overflow:visible;overflow-wrap:anywhere}.lesson-heading .muted{overflow-wrap:anywhere}
+.data-visual{flex:none;height:360px;font-size:var(--visual-label-size);line-height:1.5;min-height:260px;max-height:400px;border-color:var(--visual-separator);background:var(--visual-background);color:var(--visual-text);border-radius:var(--visual-radius)}
+.data-visual h3{font-size:1rem}.visual-kind{font-size:.75rem}.visual-note,.visual-credit{font-size:var(--visual-detail-size);color:var(--visual-support)}
+.data-visual [data-focused=true]{outline-color:var(--visual-focus);background-color:var(--visual-selected)}
+.table-scroll th,.table-scroll caption{font-size:var(--visual-detail-size)}.table-scroll td{font-size:var(--visual-detail-size)}
+.code-visual pre{font-size:var(--visual-detail-size)}.chart-label{font-size:var(--visual-detail-size)}.chart-visual .visual-note{font-size:var(--visual-detail-size);line-height:1.5}
+.image-visual figcaption,.image-visual details{font-size:var(--visual-detail-size)}.image-annotation{font-size:var(--visual-detail-size)}
+@media(max-width:600px){
+  .shorts-view{grid-template-columns:minmax(0,1fr);gap:12px}.player{width:100%;min-height:580px;max-width:none;justify-self:stretch}
+  .short-actions{flex-direction:row;justify-content:center;flex-wrap:wrap;padding:0 80px 0 0;gap:12px;min-height:65px}.short-actions button{width:auto;min-width:48px}.short-actions button>span{width:44px;height:44px}.voice-disc{display:none}
+  .short-navigation{top:auto;bottom:16px;right:0;flex-direction:row;gap:8px}.short-navigation button{width:36px;height:40px}
+  .short-title{padding:14px 14px 10px}.player h2{font-size:1.25rem}.captions{font-size:1rem;margin:0}.player-bottom .channel-badge{display:none}
+  .diagram-frame,.data-visual{max-height:360px}.data-visual{font-size:var(--visual-label-size);margin:10px;padding:12px}
+  .short-transcript li{grid-template-columns:1fr;gap:6px}.transcript-time{justify-self:start}
+}
+@media(prefers-reduced-motion:reduce){:root{--visual-transition:0ms}}

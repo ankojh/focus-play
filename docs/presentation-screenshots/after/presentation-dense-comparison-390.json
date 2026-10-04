@@ -1,0 +1,30 @@
+{
+  "width": 390,
+  "template": "comparison",
+  "nodes": [
+    {
+      "label": "WWWINDEXlookup—notalwaysfaster",
+      "detail": "Onlyifselective;mostmatchingrowsmayfavourafullscan.",
+      "fits": true,
+      "min": 13.999920008989466
+    },
+    {
+      "label": "WWWINDEXlookup—notalwaysfaster",
+      "detail": "Onlyifselective;mostmatchingrowsmayfavourafullscan.",
+      "fits": true,
+      "min": 13.999920008989466
+    },
+    {
+      "label": "WWWINDEXlookup—notalwaysfaster",
+      "detail": "Onlyifselective;mostmatchingrowsmayfavourafullscan.",
+      "fits": true,
+      "min": 13.999920008989466
+    },
+    {
+      "label": "WWWINDEXlookup—notalwaysfaster",
+      "detail": "Onlyifselective;mostmatchingrowsmayfavourafullscan.",
+      "fits": true,
+      "min": 13.999920008989466
+    }
+  ]
+}

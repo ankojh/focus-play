@@ -1,0 +1,59 @@
+{
+  "notice": "Original illustrative fixtures. Actual configured local voice; no source credits used. Listening review and comprehension claims are not established.",
+  "speech": {
+    "provider": "kokoro",
+    "voice": "af_heart",
+    "speed": 1,
+    "sample_rate": 24000,
+    "model_revision": "f3ff3571791e39611d31c381e3a41a3af07b4987",
+    "voice_sha256": "0ab5709b8ffab19bfd849cd11d98f75b60af7733253ad0d67b12382a102cb4ff"
+  },
+  "examples": [
+    {
+      "file": "lookup.wav",
+      "duration_ms": 25825,
+      "synthesis_seconds": 5.972,
+      "cache_hit": false,
+      "captions": [
+        {
+          "text": "Imagine finding a matching value in an illustrative table. A table scan tests candidate rows against the search condition.",
+          "start_ms": 0,
+          "end_ms": 8125
+        },
+        {
+          "text": "Without a useful index, the scan can examine many rows before finding a match.",
+          "start_ms": 8125,
+          "end_ms": 13375
+        },
+        {
+          "text": "An index instead maps a search key to matching rows, so the lookup need not test every row.",
+          "start_ms": 13375,
+          "end_ms": 19600
+        },
+        {
+          "text": "That shortcut has a trade-off: the index needs storage and updates when indexed values change.",
+          "start_ms": 19600,
+          "end_ms": 25825
+        }
+      ]
+    },
+    {
+      "file": "numbers-and-code.wav",
+      "duration_ms": 26875,
+      "synthesis_seconds": 2.932,
+      "cache_hit": false,
+      "captions": [
+        {
+          "text": "The illustrative data are negative -12 units, zero 0 units and large 1500 units. These synthetic values test a zero-inclusive linear scale, not a benchmark or measurements.",
+          "start_ms": 0,
+          "end_ms": 13275
+        },
+        {
+          "text": "The source snippet is displayed as text, never executed: SELECT name\nFROM customers;\nThe SELECT clause names the field and FROM names the table. This is an original display-only fixture.",
+          "start_ms": 13275,
+          "end_ms": 26875
+        }
+      ]
+    }
+  ]
+}

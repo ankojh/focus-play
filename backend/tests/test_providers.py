@@ -1,11 +1,12 @@
 import json
 import threading
+from pathlib import Path
 
 import httpx
 import pytest
 
 from app.config import Settings
-from app.contracts import LessonPlan
+from app.contracts import LessonPlan, ModelStoryboard
 from app.errors import AppError, Cancelled
 from app.providers import Ollama
 
@@ -73,6 +74,20 @@ def test_schema_is_visible_to_backends_that_do_not_enforce_format(scripted_model
     assert "compact JSON" in prompt
     assert calls[0]["options"]["repeat_penalty"] == 1.0
     assert json.loads(calls[0]["messages"][1]["content"]) == task
+
+
+def test_presentation_prompt_preserves_meaning_and_separates_generation_cache(scripted_model, monkeypatch):
+    model, streams, calls, _ = scripted_model
+    fixture = json.loads((Path(__file__).resolve().parents[2] / "fixtures/storyboard-lookup.json").read_text())
+    streams.append([chunk(json.dumps(fixture["draft"]))])
+    task = {"segments": fixture["segments"], "question_required": False}
+    model.generate(ModelStoryboard, task, threading.Event())
+    prompt = calls[0]["messages"][0]["content"]
+    for instruction in ("short complete sentences", "natural clause boundaries", "repeated sentence starts",
+                        "preserve qualifiers and exact values", "Do not use SSML", "complements rather than repeats"):
+        assert instruction in prompt
+    monkeypatch.setattr(model, "readiness", lambda: None)
+    assert model.fingerprint()["prompt_version"] == "19"
 
 
 def test_malformed_json_and_whitespace_loop_get_clean_retries(scripted_model):

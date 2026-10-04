@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 const compiledStoryboard=JSON.parse(readFileSync(new URL('../../fixtures/storyboard-lookup-playback.json',import.meta.url),'utf8'));
-function storyboardLesson(){const lesson=makeLesson();lesson.shorts[0]={...compiledStoryboard,id:'one'};return lesson;}
+function storyboardLesson(){const lesson=makeLesson();lesson.shorts[0]={...structuredClone(compiledStoryboard),id:'one'};return lesson;}
 async function seekAudio(page:Page,ms:number){
   await page.locator('audio').evaluate((a:HTMLAudioElement)=>a.pause());
   await page.locator('audio').evaluate((a:HTMLAudioElement,ms)=>new Promise<void>(resolve=>{
@@ -200,7 +200,7 @@ for(const width of [1280,390])test(`storyboard screenshots at meaningful beats, 
   await page.setViewportSize({width,height:844});await mock(page,storyboardLesson());await start(page);
   for(const [beat,ms] of [1000,7000,15000,23000].entries()){
     await seekAudio(page,ms);await expect(page.locator('.diagram')).toHaveAttribute('data-scene-id',beat<2?'scene_0':'scene_1');
-    await page.locator('.player').screenshot({path:`test-results/storyboard-${width}-beat-${beat}.png`});
+    await page.locator('.player').screenshot({path:`test-results/storyboard-${width}-beat-${beat}.png`,style:'.topbar{visibility:hidden}'});
   }
 });
 
@@ -226,6 +226,88 @@ test('scene text is escaped and all nine templates are safe to render',async({pa
     await expect(page.locator('.time-readout')).toContainText('0:20');
     if(i)await expect(diagram.locator('svg').first()).toBeVisible();
     else await expect(page.getByTestId('node-row')).toBeVisible();
-    await page.locator('.player').screenshot({path:`test-results/template-${template}.png`});
+    await page.locator('.player').screenshot({path:`test-results/template-${template}.png`,style:'.topbar{visibility:hidden}'});
   }
+});
+
+for(const width of [320,390,1280])for(const zoom of [1,2])test(`long presentation content stays readable, width ${width}, text scale ${zoom}`,async({page})=>{
+  await page.setViewportSize({width,height:900});await page.emulateMedia({reducedMotion:'reduce'});
+  const lesson=makeLesson(),s=lesson.shorts[0];
+  s.objective='Understand why an INDEX lookup is not always faster than scanning, especially when the search condition matches most rows';
+  const node=s.scenes[0].nodes[0];node.label='WWW INDEX lookup — not always faster';node.detail='Only when selective; a scan may win if most rows match the condition.';
+  s.narration_units[0].text='An INDEX can map a search key to a row, but the planner may choose a scan when the search condition matches most rows. '.repeat(5).trim();
+  await mock(page,lesson);await start(page);
+  await page.evaluate(zoom=>document.documentElement.style.fontSize=`${zoom*100}%`,zoom);
+  const geometry=async()=>page.getByTestId('node-key').evaluate(g=>{
+    const card=g.querySelector('rect')!.getBBox();const texts=[...g.querySelectorAll('text')];
+    return {minSize:Math.min(...texts.map(t=>parseFloat(getComputedStyle(t).fontSize)*t.getScreenCTM()!.a)),fits:texts.every(t=>{const b=t.getBBox();return b.x>=card.x && b.x+b.width<=card.x+card.width+.5 && b.y>=card.y && b.y+b.height<=card.y+card.height+.5;}),label:texts.filter(t=>t.classList.contains('node-label')).map(t=>t.textContent).join('').replace(/\s/g,''),detail:texts.filter(t=>t.classList.contains('node-detail')).map(t=>t.textContent).join('').replace(/\s/g,'')};
+  });
+  await expect.poll(async()=> (await geometry()).minSize).toBeGreaterThanOrEqual(14*zoom-.1);
+  const measured=await geometry();writeFileSync(`test-results/presentation-long-${width}-${zoom}.json`,JSON.stringify({width,zoom,...measured},null,2));expect(measured.fits).toBe(true);expect(measured.label).toBe(node.label.replace(/\s/g,''));expect(measured.detail).toBe(node.detail.replace(/\s/g,''));
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+  const captions=page.getByTestId('captions');await expect(captions).toHaveText(s.narration_units[0].text);
+  expect(await captions.evaluate(e=>e.scrollHeight>e.clientHeight)).toBe(true);
+  await captions.hover();await page.mouse.wheel(0,160);await expect.poll(()=>captions.evaluate(e=>e.scrollTop)).toBeGreaterThan(0);await expect(page.locator('.player h2')).toHaveText(s.objective);
+  await page.getByRole('button',{name:'Hide captions'}).click();await expect(captions).toBeHidden();await page.getByText('Full transcript',{exact:true}).click();await expect(page.locator('.short-transcript')).toContainText(s.narration_units[0].text);
+  await page.getByRole('button',{name:'Seek to narration beat 2'}).click();await expect.poll(()=>page.locator('audio').evaluate((a:HTMLAudioElement)=>a.currentTime)).toBe(15);
+  await page.getByRole('button',{name:'Show captions'}).click();await expect(captions).toHaveText(s.narration_units[1].text);
+  await page.locator('.player').screenshot({path:`test-results/presentation-long-${width}-${zoom}.png`,style:'.topbar{visibility:hidden}'});
+});
+
+for(const template of ['comparison','key_fact'])for(const width of [320,390,1280])test(`dense ${template} preserves qualifiers at width ${width}`,async({page})=>{
+  await page.setViewportSize({width,height:900});await page.emulateMedia({reducedMotion:'reduce'});
+  const lesson=makeLesson(),scene=lesson.shorts[0].scenes[0];scene.template=template;
+  scene.nodes=Array.from({length:4},(_,i)=>({...scene.nodes[0],id:i===0?'key':i===1?'row':`support_${i}`,slot:i,label:'WWW INDEX lookup — not always faster',detail:'Only if selective; most matching rows may favour a full scan.'}));
+  await mock(page,lesson);await start(page);await seekAudio(page,20000);
+  const measured=await page.locator('[data-testid^="node-"]').evaluateAll(nodes=>nodes.map(g=>{
+    const rect=(g.querySelector('rect') as SVGRectElement).getBBox();const labels=[...g.querySelectorAll('.node-label')] as SVGTextElement[],details=[...g.querySelectorAll('.node-detail')] as SVGTextElement[];
+    return {label:labels.map(t=>t.textContent).join('').replace(/\s/g,''),detail:details.map(t=>t.textContent).join('').replace(/\s/g,''),fits:[...labels,...details].every(t=>{const b=t.getBBox();return b.x>=rect.x && b.x+b.width<=rect.x+rect.width+.5 && b.y+b.height<=rect.y+rect.height+.5;}),min:Math.min(...details.map(t=>parseFloat(getComputedStyle(t).fontSize)*t.getScreenCTM()!.a))};
+  }));expect(measured).toHaveLength(4);
+  for(const node of measured){expect(node.label).toBe(scene.nodes[0].label.replace(/\s/g,''));expect(node.detail).toBe(scene.nodes[0].detail.replace(/\s/g,''));expect(node.min).toBeGreaterThanOrEqual(13.99);expect(node.fits).toBe(true);}
+  writeFileSync(`test-results/presentation-dense-${template}-${width}.json`,JSON.stringify({width,template,nodes:measured},null,2));
+  await page.locator('.player').screenshot({path:`test-results/presentation-dense-${template}-${width}.png`,style:'.topbar{visibility:hidden}'});
+});
+
+test('caption and transcript text are escaped without live announcements',async({page})=>{
+  const lesson=makeLesson();lesson.shorts[0].narration_units[0].text='<img src=x onerror="window.injected=true"> A safe spoken phrase.';
+  lesson.sources[0].title='<svg onload="window.injected=true">Source label</svg>';
+  lesson.shorts[0].scenes[0].nodes[0].detail='<img src=x onerror="window.injected=true">';
+  await mock(page,lesson);await start(page);await page.getByText('Full transcript',{exact:true}).click();
+  await expect(page.locator('.evidence-list')).toContainText(lesson.sources[0].title);
+  await expect(page.locator('.diagram')).toHaveAttribute('aria-label',/onerror/);
+  await expect(page.locator('.evidence-list svg[onload],.diagram img')).toHaveCount(0);
+  await expect(page.getByTestId('captions')).toHaveAttribute('aria-live','off');await expect(page.locator('.captions img,.short-transcript img')).toHaveCount(0);
+  await expect(page.locator('.short-transcript')).toContainText('<img src=x');expect(await page.evaluate(()=>('injected' in window))).toBe(false);
+});
+
+test('settled arrows and paused instructional states do not move; role changes retain entity identity',async({page})=>{
+  await mock(page,storyboardLesson());await start(page);await seekAudio(page,1000);
+  const before=await page.getByTestId('node-node_1').getAttribute('data-entity-color');
+  const bounds=await page.locator('.diagram').getAttribute('viewBox');await seekAudio(page,7000);
+  await expect(page.getByTestId('node-node_1')).toHaveAttribute('data-entity-color',before!);await expect(page.locator('.diagram')).toHaveAttribute('viewBox',bounds!);
+  await seekAudio(page,15000);
+  await expect(page.getByTestId('connection-conn_0').locator('path')).not.toHaveAttribute('stroke-dasharray');
+  const markup=await page.locator('.diagram').evaluate(e=>e.outerHTML);
+  await page.waitForTimeout(250);expect(await page.locator('.diagram').evaluate(e=>e.outerHTML)).toBe(markup);
+});
+
+test('autoplay blocking is actionable and not a corrupt audio error',async({page})=>{
+  await page.addInitScript(()=>{HTMLMediaElement.prototype.play=()=>Promise.reject(new DOMException('Blocked','NotAllowedError'));});
+  await mock(page);await start(page);await page.getByRole('button',{name:'Play',exact:true}).click();
+  await expect(page.getByRole('alert')).toContainText('Your browser blocked autoplay. Click Play');await expect(page.getByRole('alert')).not.toContainText('file');await expect(page.getByRole('button',{name:'Play',exact:true})).toBeEnabled();
+});
+
+test('diagram text and captions meet AA contrast; focus is visible and answer stays after backward seek',async({page})=>{
+  const lesson=makeLesson();(lesson.shorts[0] as any).question={prompt:'Where does the key lead?',options:['A row','A server'],answer_index:0,explanation:'An index key locates the matching row.',evidence,allowance_ms:20000};
+  await mock(page,lesson);await start(page);await page.getByLabel('Seek within short').fill('30000');
+  const ratios=await page.locator('.diagram').evaluate(svg=>{
+    const rgb=(color:string)=>color.match(/[\d.]+/g)!.slice(0,3).map(Number);
+    const lum=(color:string)=>rgb(color).map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;}).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0);
+    const contrast=(a:string,b:string)=>(Math.max(lum(a),lum(b))+.05)/(Math.min(lum(a),lum(b))+.05);
+    const values=[...svg.querySelectorAll('g[data-testid^="node-"]')].flatMap(g=>[...g.querySelectorAll('text')].map(t=>contrast(getComputedStyle(t).fill,getComputedStyle(g.querySelector('rect')!).fill)));
+    const caption=document.querySelector('.captions')!,style=getComputedStyle(caption);values.push(contrast(style.color,style.backgroundColor));return values;
+  });writeFileSync('test-results/presentation-contrast.json',JSON.stringify({ratios,minimum:Math.min(...ratios)},null,2));expect(Math.min(...ratios)).toBeGreaterThanOrEqual(4.5);
+  await page.keyboard.press('Tab');await page.locator('.diagram-frame').focus();expect(await page.locator('.diagram-frame').evaluate(e=>getComputedStyle(e).outlineStyle)).toBe('solid');
+  await page.getByRole('button',{name:'A row',exact:true}).click();await expect(page.getByRole('button',{name:'A row',exact:true})).toHaveAttribute('aria-pressed','true');
+  await seekAudio(page,1000);await expect(page.locator('.question')).toBeVisible();await expect(page.locator('.question [role=status]')).toContainText('Correct.');
 });

@@ -15,7 +15,7 @@ from .contracts import ProviderHealth, NarrationUnit
 from .icons import ICONS
 from .errors import AppError, Cancelled
 
-PROMPT_VERSION = "18"
+PROMPT_VERSION = "19"
 SCHEMA_VERSION = "5-mixed-visuals"
 
 
@@ -130,11 +130,16 @@ class Ollama:
             "Write narration in your own words as a teacher speaking directly to the learner as 'you'. "
             "Never mention videos, presenters, channels, 'we', 'I', or step numbers from a video. "
             "Never say 'as mentioned', 'here', or 'this' about something the learner cannot see. Remove filler such as 'like', 'okay', 'so', and 'basically'. "
-            "Each narration unit must make sense on its own: complete sentences, no dangling references. "
+            "Each narration unit must make sense on its own: short complete sentences, natural clause boundaries, no dangling references. "
+            "Prefer one compact spoken idea per beat. Use punctuation for natural phrasing, not filler or deliberate padding. "
+            "Avoid repeated sentence starts and abrupt fragments between beats. Explain technical abbreviations on first use when the source supports the expansion. "
+            "Write symbols and numerical units in unambiguous spoken words without changing their source meaning; preserve qualifiers and exact values. "
+            "Do not use SSML, pronunciation guesses, extra silence or slower speech to fill the learner's time budget. "
             "For each narration unit select one supplied segment_id whose passage teaches that point. "
             "Aim for 40 to 80 total narration words over 3 to 5 beats (2 if simpler is justified). Count the words. Do not return timing or evidence quote fields. "
-            "Diagram nodes use node_0 through node_3 in order with unique slots 0 to 3. Every node has a short label, a detail line of 3 to 8 words "
-            "that explains it, an icon from the allowed list that shows the idea, and a role. "
+            "Diagram nodes use node_0 through node_3 in order with unique slots 0 to 3. Every node has a short label (ideally 1 to 4 words, at most 44 characters), a detail line of 3 to 8 words (at most 70 characters) "
+            "that complements rather than repeats the spoken sentence. Preserve essential conditions and qualifiers; move lengthy explanation into narration or another beat, never silently abbreviate meaning. Every node has "
+            "an icon from the allowed list that shows the idea, and a role. "
             "Connections use conn_0 through conn_3 and must refer to existing nodes. "
             "Use supplied segment_id values exactly. Author explicit beat operations with existing targets: reveal, hide, focus, connect, move, change_state. "
             "Each beat supplies a unique beat_id, scene_id and learning purpose. Scenes are ordered and contiguous; changing scene_id replaces the scene. "
