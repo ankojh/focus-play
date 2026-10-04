@@ -72,6 +72,9 @@ class NarrationUnit(Contract):
     start_ms: int = 0
     end_ms: int = 0
 
+TeachingRole = Literal["foundation", "mechanism", "worked_example", "comparison", "misconception", "application", "practice", "recap"]
+CurriculumRole = Literal["core", "extension", "closing"]
+
 Template = Literal["process", "comparison", "example", "timeline", "chart", "steps", "cycle", "dos_donts", "key_fact"]
 # Roles colour a node: start, step and result for sequences, good and bad for do vs. don't.
 Role = Literal["neutral", "start", "step", "result", "warning", "good", "bad"]
@@ -113,6 +116,8 @@ class Question(Contract):
     def answer(self):
         if self.answer_index >= len(self.options) or any(len(x) > 180 for x in self.options):
             raise ValueError("Invalid question options.")
+        if len({" ".join(x.lower().split()) for x in self.options}) != len(self.options):
+            raise ValueError("Question choices must be distinct.")
         return self
 
 class ShortDraft(Contract):
@@ -189,6 +194,15 @@ class Scene(Contract):
 
 ShortState = Literal["queued", "generating", "validating", "synthesizing", "ready", "failed", "cancelled"]
 class Short(Contract):
+    concept_id: str | None = None
+    learning_outcome: str | None = None
+    teaching_role: TeachingRole | None = None
+    curriculum_role: CurriculumRole = "core"
+    example_id: str | None = None
+    source_review_status: Literal["unchecked", "model_supported"] = "unchecked"
+    source_review_reason: str = Field(default="", max_length=500)
+    teaching_diagnostics: list[Annotated[str, Field(min_length=1, max_length=300)]] = Field(default=[], max_length=8)
+    review_repair_reasons: list[Annotated[str, Field(max_length=500)]] = Field(default=[], max_length=2)
     storyboard_version: Literal[1, 2] = 1
     timeline_compiler_version: str | None = None
     id: str
@@ -250,7 +264,26 @@ class StoryboardDraft(Contract):
         validate_storyboard(self)
         return self
 
+class ExampleRecord(Contract):
+    id: str = Field(pattern=r"^[a-z][a-z0-9_]{0,19}$")
+    # Source-only policy: facts are exact excerpts, not synthetic measurements.
+    entities: list[Annotated[str, Field(min_length=1, max_length=60)]] = Field(min_length=1, max_length=4)
+    facts: list[Annotated[str, Field(min_length=1, max_length=240)]] = Field(min_length=1, max_length=4)
+    evidence_segment_ids: list[str] = Field(min_length=1, max_length=4)
+
 class Objective(Contract):
+    # Defaults only adapt legacy saved lessons. New model plans require these fields.
+    concept_id: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]{0,19}$")
+    learning_outcome: str | None = Field(default=None, min_length=10, max_length=180)
+    teaching_role: TeachingRole = "foundation"
+    dependency_ids: list[str] = Field(default=[], max_length=4)
+    relevance: str = Field(default="", max_length=180)
+    evidence_segment_ids: list[str] = Field(default=[], max_length=4)
+    curriculum_role: CurriculumRole = "core"
+    target_duration_ms: int = Field(default=40000, ge=1000, le=40000)
+    example_id: str | None = None
+    visual_intent: str = Field(default="", max_length=120)
+    checkpoint: bool = False
     title: str = Field(min_length=5, max_length=150)
     template: Template
     prerequisites: list[Annotated[str, Field(min_length=1, max_length=80)]] = Field(max_length=4)
@@ -259,6 +292,17 @@ class LessonPlan(Contract):
     sufficient_evidence: bool
     reason: str = Field(max_length=400)
     objectives: list[Objective] = Field(max_length=8)
+    examples: list[ExampleRecord] = Field(default=[], max_length=2)
+
+class CoverageEntry(Contract):
+    short_id: str
+    concept_id: str
+    learning_outcome: str = Field(max_length=180)
+    teaching_role: TeachingRole
+    claim_summary: str = Field(max_length=240)
+    evidence_segment_ids: list[str] = Field(max_length=20)
+    example_id: str | None = None
+    adds_coverage: bool = True
 
 # The model scores candidate videos 1 to 5 from their transcripts. Code picks the sources.
 class CandidateScore(Contract):
@@ -285,6 +329,10 @@ class Job(Contract):
     updated_at: float
 
 class Lesson(Contract):
+    teaching_plan_version: Literal[1, 2] = 1
+    examples: list[ExampleRecord] = Field(default=[], max_length=2)
+    coverage_history: list[CoverageEntry] = Field(default=[], max_length=64)
+    plan_diagnostics: list[str] = Field(default=[], max_length=8)
     id: str
     request: SavedLearningRequest
     objectives: list[Objective] = []
@@ -345,6 +393,12 @@ class ModelQuestion(Contract):
     distractors: list[Annotated[str, Field(min_length=1, max_length=180)]] = Field(min_length=1, max_length=3)
     explanation: str = Field(min_length=10, max_length=300)
     segment_id: str
+    @model_validator(mode="after")
+    def unique_answers(self):
+        options = [self.correct_answer, *self.distractors]
+        if len({" ".join(x.lower().split()) for x in options}) != len(options):
+            raise ValueError("Question choices must be distinct.")
+        return self
 
 class ModelBeat(Contract):
     beat_id: str = Field(pattern=r"^[a-z][a-z0-9_]{0,19}$")

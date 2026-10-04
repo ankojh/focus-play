@@ -117,7 +117,12 @@ class StubModel:
         if self.delay:cancel.wait(self.delay)
         check_cancel(cancel)
         if contract is LessonPlan:
-            result=LessonPlan(sufficient_evidence=True,reason="",objectives=[Objective(title=f"Learning point {i}",template=t,prerequisites=[]) for i,t in enumerate(["process","comparison","example"])])
+            outcomes = ["Explain how an index maps keys to rows", "Compare an indexed lookup with scanning rows", "Predict which indexed changes require maintenance"]
+            result=LessonPlan(sufficient_evidence=True,reason="",objectives=[Objective(
+                concept_id=f"concept_{i}", learning_outcome=outcomes[i], teaching_role=["mechanism","comparison","application"][i],
+                dependency_ids=[f"concept_{i-1}"] if i else [], relevance="Supports the database learning goal",
+                evidence_segment_ids=[task["segments"][0]["id"]], visual_intent="Show the supported mechanism", checkpoint=i==1,
+                title=f"Learning point {i}",template=t,prerequisites=[]) for i,t in enumerate(["process","comparison","example"])])
         elif contract is SupportCheck:result=SupportCheck(supported=True,reason="Test only")
         elif contract is CandidateRanking:result=CandidateRanking(scores=[CandidateScore(video_id=c["video_id"],relevance=5,level_fit=5,teaching=5,density=5,captions=5,reason="Test only") for c in task["candidates"]])
         else:

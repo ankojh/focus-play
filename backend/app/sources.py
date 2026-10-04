@@ -88,7 +88,7 @@ def stems(text: str) -> set[str]:
     return {w[:5] for w in re.findall(r"[a-z0-9]+", text.lower()) if w not in STOP}
 
 
-def retrieve(sources: list[Source], goal: str, limit: int = 20, budget: int = 4500) -> list[TranscriptSegment]:
+def retrieve(sources: list[Source], goal: str, limit: int = 20, budget: int = 4500, required_ids=()) -> list[TranscriptSegment]:
     """Pick the passages that best teach the goal, shared across videos, each with the passage that follows it."""
     words = stems(goal)
     def score(segment):
@@ -98,6 +98,15 @@ def retrieve(sources: list[Source], goal: str, limit: int = 20, budget: int = 45
         ranked = sorted(range(len(source.segments)), key=lambda i: (-score(source.segments[i]), i))
         queues.append([source.segments, [i for i in ranked if score(source.segments[i]) > 0]])
     chosen, length = {}, 0
+    required = set(required_ids)
+    for order, source in enumerate(sources):
+        for j, segment in enumerate(source.segments):
+            if segment.id in required:
+                chosen[(order, j)] = segment
+                length += len(segment.text)
+                required.remove(segment.id)
+    if required or length > budget or len(chosen) > limit:
+        raise AppError("PLAN_EVIDENCE_UNAVAILABLE", "Planned evidence is missing or exceeds the bounded passage context. Use a more focused goal.", 422)
     # Round-robin across videos so one long transcript cannot fill the context.
     while len(chosen) < limit and any(q for _, q in queues):
         for order, (segments, queue) in enumerate(queues):

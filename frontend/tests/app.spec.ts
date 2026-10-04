@@ -36,6 +36,23 @@ async function mock(page:Page,lesson=makeLesson(),options:{failure?:boolean;sour
 }
 async function start(page:Page) {await page.goto('/');await page.getByLabel('Learning goal').fill('Database indexes');await page.getByRole('button',{name:'Create my lesson'}).click();await expect(page.locator('.player')).toBeVisible();await expect.poll(()=>page.locator('audio').evaluate((a:HTMLAudioElement)=>a.readyState)).toBeGreaterThanOrEqual(1);await page.locator('audio').evaluate((a:HTMLAudioElement)=>a.pause());await expect(page.getByRole('button',{name:'Play',exact:true})).toBeVisible();}
 
+test('teaching outcomes and planned practice allowances are visible without a timer',async({page})=>{
+  const lesson=makeLesson() as any;
+  lesson.teaching_plan_version=2;lesson.plan_diagnostics=['This source supports lookup and maintenance, not a complete database course.'];
+  lesson.shorts[0].learning_outcome='Trace a search key to a matching row';lesson.shorts[0].question_required=true;
+  lesson.shorts[0].question={prompt:'What does the matching key locate?',options:['A row','A server'],answer_index:0,explanation:'The index maps a key to a row location.',evidence,allowance_ms:20000};
+  await mock(page,lesson);await start(page);await expect(page.getByRole('complementary',{name:'Lesson details'})).toBeVisible();
+  await expect(page.locator('.learning-point')).toContainText('You’ll be able to: Trace a search key to a matching row');
+  await expect(page.locator('.outline')).toContainText('practice allowance 20 sec');
+  await expect(page.locator('.outline')).toContainText(lesson.plan_diagnostics[0]);
+  await page.getByRole('slider',{name:'Seek within short'}).focus();await page.keyboard.press('End');await expect(page.locator('.question')).toBeVisible();
+  await expect(page.locator('.question')).toContainText('20 SEC ALLOWANCE');
+  await expect(page.locator('.question')).toContainText('answers are not timed');
+  await expect(page.locator('audio')).toHaveAttribute('loop','');
+  await expect(page.getByRole('button',{name:'A row',exact:true})).not.toHaveClass(/selected/);
+  await page.getByRole('button',{name:'A row',exact:true}).click();await expect(page.locator('.question [role="status"]')).toContainText('Correct.');
+});
+
 test('library replaces sidebar sources and create, and branding has no Local labels',async({page})=>{
   await mock(page,makeLesson(),{saved:true});await page.goto('/');
   const nav=page.getByRole('navigation',{name:'Main navigation'});
@@ -113,7 +130,7 @@ test('source setup failure keeps retry and offers no source fallback',async({pag
 });
 test('saved imported lesson opens without creating a lesson or changing its source label',async({page})=>{
   const lesson=makeLesson();lesson.request.source_mode='import';lesson.request.source_ids=['src_test'];Object.assign(lesson.sources[0],{source_type:'import',title:'Saved manual transcript',transcript_provider:null,channel:null,video_id:null,url:null});
-  const state=await mock(page,lesson,{saved:true});await page.goto('/');await page.locator('.recent').getByRole('button').click();await expect(page.getByRole('button',{name:'Play',exact:true})).toBeVisible();await expect(page.locator('.evidence-list')).toContainText('Saved manual transcript');expect(state.creates()).toBe(0);
+  const state=await mock(page,lesson,{saved:true});await page.goto('/');await page.locator('.recent').getByRole('button').click();await expect(page.locator('.player h2')).toHaveText('Understand an index one');await expect(page.locator('.evidence-list')).toContainText('Saved manual transcript');expect(state.creates()).toBe(0);
   await page.getByRole('button',{name:'Library',exact:true}).click();await expect(page.locator('.library-lesson')).toContainText('Database indexes');await expect(page.locator('.library-short')).toHaveCount(2);await page.locator('.library-short').nth(1).click();await expect(page.locator('.player h2')).toHaveText('Understand an index two');await expect(page.locator('.evidence-list')).toContainText('Saved manual transcript');expect(state.creates()).toBe(0);
 });
 test('request errors do not erase the form',async({page})=>{

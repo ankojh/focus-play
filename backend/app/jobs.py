@@ -13,6 +13,8 @@ from .ranking import KEEP, pick, ranking_task, validator
 from .sources import retrieve
 from .validation import validate_draft, verify_support, planned_duration, attach_evidence, diagram_evidence
 from .youtube import YouTubeSources, queries, require_youtube
+from .teaching import (TEACHING_VERSION, validate_plan as check_plan, planned_shorts,
+                       objective_for, teaching_context, record_coverage, plan_diagnostics)
 
 
 TEMPLATES = {
@@ -262,25 +264,42 @@ class Jobs:
         lesson.video_rankings.extend(ranking.scores)
         return pick(ranking,fetched)
 
-    async def reviewed(self,draft,task,segments,valid,cancel):
+    async def reviewed(self,draft,task,segments,valid,cancel,short=None,lesson=None):
         # A rejected short is rewritten once with the reviewer's reason before the lesson fails.
         for attempt in range(2):
             try:
-                await asyncio.to_thread(verify_support, self.model, draft, segments, cancel)
+                review = await asyncio.to_thread(verify_support, self.model, draft, segments, cancel, task.get("teaching"))
                 check_cancel(cancel)
+                if short is not None:
+                    short.source_review_status = "model_supported"
+                    short.source_review_reason = review.reason
+                    short.teaching_diagnostics = review.teaching_issues
                 return draft
             except ValueError as exc:
+                if short is not None:
+                    short.source_review_status = "unchecked"
+                    short.review_repair_reasons = (short.review_repair_reasons + [str(exc)[:500]])[-2:]
+                    if lesson is not None:
+                        check_cancel(cancel)
+                        self.store.save(lesson)
                 if attempt:
-                    raise AppError("UNSUPPORTED_CLAIM", "The model source review could not support this short. Retry or use a more focused learning goal.", 422) from exc
+                    teaching_failure = str(exc).startswith("The teaching review")
+                    raise AppError("TEACHING_QUALITY_FAILED" if teaching_failure else "UNSUPPORTED_CLAIM",
+                                   "The bounded teaching review rejected this short. Retry or use a more focused learning goal." if teaching_failure else "The model source review could not support this short. Retry or use a more focused learning goal.", 422) from exc
                 retry={**task,"task":task["task"]+" A reviewer rejected the previous version: "+str(exc)[:400]+" Fix that problem."}
                 draft = attach_evidence(await asyncio.to_thread(self.model.generate, ModelStoryboard, retry, cancel, valid), segments)
         return draft
 
-    def context(self,lesson,focus=None):
+    def cache_draft(self, key, draft, short):
+        self.store.cache_put(key, {"draft": draft.model_dump(), "source_review_reason": short.source_review_reason,
+                                   "teaching_diagnostics": short.teaching_diagnostics, "review_repair_reasons": short.review_repair_reasons})
+
+    def context(self,lesson,focus=None,required_ids=()):
         sources=self.youtube_sources(lesson)
-        segments=retrieve(sources,focus or lesson.request.goal)
+        segments=retrieve(sources,focus or lesson.request.goal,required_ids=required_ids)
         key_base={"source_policy":"youtube-v1","sources":[{"id":s.id,"hash":s.content_hash} for s in sources],
             "settings":lesson.provider_settings,"storyboard_version":STORYBOARD_VERSION,"timeline_compiler_version":COMPILER_VERSION,
+            "teaching_version":TEACHING_VERSION,
             "request":lesson.request.model_dump(exclude={"request_id","source_mode","source_ids"})}
         return segments,key_base
 
@@ -313,19 +332,29 @@ class Jobs:
             lesson.status = "preparing"
             await self.stage(lesson, "planning the lesson")
             planning_started = time.monotonic()
-            max_shorts = min(8, (lesson.request.time_budget_seconds * 1000) // 46667)
+            max_shorts = min(8, (lesson.request.time_budget_seconds * 1000) // 40000)
             def validate_plan(plan):
-                if plan.sufficient_evidence and not 1 <= len(plan.objectives) <= max_shorts:
-                    raise ValueError(f"Use 1 to {max_shorts} ordered objectives.")
+                check_plan(plan, segments, max_shorts, lesson.request.time_budget_seconds * 1000)
             while True:
                 plan_key=cache_key({**key_base,"stage":"plan"})
                 cached=self.store.cache_get(plan_key)
                 plan=LessonPlan.model_validate(cached) if cached else await asyncio.to_thread(self.model.generate,LessonPlan,
-                    {"task":f"Plan a coherent lesson with 1 to {max_shorts} ordered objectives. Order them the way a teacher would for this learner: basics first, then core technique, then refinement. "
-                        "The first objective must be a sensible starting point for the learner's current knowledge. Each objective teaches one distinct idea; do not repeat or overlap objectives. "
-                        "Title objectives as short learner goals. Choose the diagram template that best shows each idea: "+TEMPLATE_GUIDE+" Vary templates across the lesson. "
-                        "Prerequisites are brief knowledge concepts; use [] if none are needed. Plan brief introductory learning points, not a comprehensive course. "
-                        "Set sufficient_evidence=true if any useful learning points can be taught; partial topic coverage is fine.","request":key_base["request"],"segments":[s.model_dump() for s in segments]},cancel,validate_plan)
+                    {"task":f"Plan a coherent source-grounded lesson with 1 to {max_shorts} ordered outcomes, not a list of summaries. "
+                        "Start with the learner's goal and prior knowledge: skip basics they know, but preserve needed dependencies. "
+                        "Use stable concept_id values; dependency_ids can name only earlier concepts. Express an observable learning_outcome (explain, predict, choose, trace, apply). "
+                        "Give each short one outcome, its relevance to this learner and supplied evidence_segment_ids. "
+                        "Progress where useful from understanding a mechanism to a worked example, distinction/misconception, application and recall. "
+                        "Do not force every role or expand a narrow goal. Longer lessons should add useful depth, not introductions in new words. "
+                        "Classify core/extension/closing separately from teaching_role. A recap is closing, depends on earlier concepts and does not add new coverage. "
+                        "Place checkpoint=true at a coherent application, difficult distinction or closing boundary, not every third short. "
+                        f"Reserve 40000ms per clip plus 20000ms per checkpoint within {lesson.request.time_budget_seconds * 1000}ms. target_duration_ms=40000 until calibrated duration planning is available. "
+                        "Use up to two recurring example records only when sources contain them: stable entities, exact excerpt facts, evidence_segment_ids. "
+                        "No synthetic substitutions or invented values, even labelled illustrative. Omit unsupported examples. "
+                        "Describe visual_intent before choosing a renderer template: "+TEMPLATE_GUIDE+" "
+                        "Keep strings concise to fit the local output limit. Prerequisites are short knowledge concepts; [] if none. "
+                        "Set sufficient_evidence=false with a reason if the actual requested goal is unsupported, and return objectives=[] and examples=[]. "
+                        "Do not imply a short partial lesson fully covers the goal; record limitations in reason.",
+                     "plan_version":2,"max_objectives":max_shorts,"request":key_base["request"],"segments":[s.model_dump() for s in segments]},cancel,validate_plan)
                 validate_plan(plan)
                 check_cancel(cancel)
                 if plan.sufficient_evidence:
@@ -341,7 +370,10 @@ class Jobs:
             if not cached:
                 self.store.cache_put(plan_key,plan.model_dump())
             lesson.objectives = plan.objectives
-            lesson.shorts = [Short(id=uid("short_"), objective=o.title, prerequisites=o.prerequisites, question_required=(i + 1) % 3 == 0) for i, o in enumerate(plan.objectives)]
+            lesson.teaching_plan_version = 2
+            lesson.examples = plan.examples
+            lesson.plan_diagnostics = ([plan.reason] if plan.reason else []) + plan_diagnostics(plan)
+            lesson.shorts = planned_shorts(plan, lambda: uid("short_"))
             lesson.short_ids = [s.id for s in lesson.shorts]
             lesson.planned_duration_ms = planned_duration(lesson.shorts)
             if lesson.planned_duration_ms > lesson.request.time_budget_seconds * 1000:
@@ -355,9 +387,12 @@ class Jobs:
             self.complete(lesson)
             return False
         index = lesson.shorts.index(short)
-        core_index = len([s for s in lesson.shorts[:index] if not s.optional])
-        focus=f"{lesson.request.goal} {short.objective}"
-        segments,key_base=self.context(lesson,focus)
+        objective = objective_for(lesson, short)
+        example = next((e for e in lesson.examples if e.id == short.example_id), None)
+        required_ids = list(dict.fromkeys((objective.evidence_segment_ids if objective and not short.optional else []) +
+                                         (example.evidence_segment_ids if example else [])))
+        focus=f"{lesson.request.goal} {short.learning_outcome or short.objective}"
+        segments,key_base=self.context(lesson,focus,required_ids)
         if short.optional:
             while True:
                 support=await asyncio.to_thread(self.model.generate,LessonPlan,
@@ -369,9 +404,16 @@ class Jobs:
                     raise AppError("INSUFFICIENT_EVIDENCE","Available YouTube transcripts cannot support this additional short. Retry or start a more focused lesson.",422)
                 rounds+=1
                 segments,key_base=self.context(lesson,focus)
-        template = "example" if short.optional and short.objective.startswith("Show") else lesson.objectives[min(core_index, len(lesson.objectives) - 1)].template
-        earlier_narration=[u.text for s in lesson.shorts[:index] for u in s.narration_units]
-        short_key = cache_key({**key_base, "objective": short.objective, "template": template, "question": short.question_required, "earlier": [s.objective for s in lesson.shorts[:index]], "earlier_narration": earlier_narration, "stage": "draft"})
+        template = "example" if short.optional and short.objective.startswith("Show") else objective.template if objective else "process"
+        history = teaching_context(lesson, short)
+        earlier_narration = history["recent_narration"]
+        earlier_questions = [s.question.prompt for s in lesson.shorts[:index] if s.question][-6:]
+        teaching = {"goal": lesson.request.goal, "learner": lesson.request.prior_knowledge,
+                    "outcome": short.learning_outcome or short.objective, "role": short.teaching_role,
+                    "plan": objective.model_dump() if objective and not short.optional else None,
+                    "example": example.model_dump() if example else None, "history": history}
+        short_key = cache_key({**key_base, "teaching": teaching, "template": template, "question": short.question_required,
+                               "earlier_questions": earlier_questions, "segments": [s.id for s in segments], "stage": "draft"})
         cached = self.store.cache_get(short_key)
         await self.stage(lesson, "preparing the first short" if index == 0 else f"preparing short {index + 1}", short, "generating")
         model_start = time.monotonic()
@@ -379,29 +421,39 @@ class Jobs:
             draft = attach_evidence(content, segments) if isinstance(content, ModelStoryboard) else content
             if draft.scenes[0].template != template:
                 raise ValueError(f"Use the {template} template for the first scene.")
-            validate_draft(draft, segments, short.question_required, earlier_narration)
+            validate_draft(draft, segments, short.question_required, earlier_narration,
+                           allow_recap=short.teaching_role == "recap", earlier_questions=earlier_questions, example=example)
         task = {"task": "Teach one learning outcome with a supported visual demonstration. Return a complete ModelStoryboard version 2. "
                     "Aim for 3 to 5 brief beats: question/situation, baseline, meaningful change or alternative, takeaway. A simpler two-beat explanation is allowed. "
                     "Use 40 to 80 total spoken words, not more words just to add beats. Each beat has a unique beat_id, purpose, scene_id, cited segment_id and explicit operations. "
                     "Use 1 to 3 scenes in contiguous order. A changed scene_id replaces the scene; never return to an earlier scene. "
                     "Reveal nodes before focusing, moving, hiding or changing their state; connect only after both endpoints are revealed. "
                     "Show concepts changing, not every label at once. Explicitly target the concept being taught, not a name mentioned as absent. "
-                    "State changes select an authored state_id for that target with supported label/detail/role. Mark synthetic examples as illustrative; do not invent benchmarks. "
+                    "State changes select an authored state_id for that target with supported label/detail/role. Use source-only examples; no synthetic substitutions or invented benchmarks. "
+                    "Preserve the supplied example entities and facts. Open directly with the outcome, define necessary terms once, show why/how, then give a concise takeaway or condition. "
                     "Every node needs a reveal and every connection a connect. For cycle supply the explicit loop connections; dos_donts has no connections. "
-                    "Do not repeat earlier_narration. A question supplies a correct_answer, 1 to 3 plausible incorrect distractors, and a one-sentence explanation. Question must be null unless required. "
+                    "Use the compact coverage history to add new meaning, not synonym-based duplicates. An explicit recap may briefly revisit its dependencies without claiming new coverage. "
+                    "A distinct application of a known concept is allowed. Avoid generic hooks, filler and false guarantees. "
+                    "A required checkpoint tests the outcome actually taught: prediction/application over trivia, one unambiguous correct_answer, "
+                    "1 to 3 plausible distractors representing misconceptions and supported reasoning in explanation. Do not repeat earlier questions. Question must be null unless required. "
                     "Use 2 to 4 nodes per scene with IDs node_0 through node_3 in order and unique slots. "
                     f"First scene template {template}: {TEMPLATES[template]} Later scenes can use any allowed template. Do not author timestamps or renderer code.",
                 "objective": short.objective, "template": template, "question_required": short.question_required,
-                "learner": lesson.request.prior_knowledge, "earlier_objectives": [s.objective for s in lesson.shorts[:index]],
-                "earlier_narration": earlier_narration, "segments": [s.model_dump() for s in segments]}
-        draft = StoryboardDraft.model_validate(cached) if cached else attach_evidence(await asyncio.to_thread(self.model.generate, ModelStoryboard, task, cancel, valid), segments)
+                "learner": lesson.request.prior_knowledge, "teaching": teaching, "earlier_questions": earlier_questions,
+                "segments": [s.model_dump() for s in segments]}
+        if cached:
+            short.source_review_status = "model_supported"
+            short.source_review_reason = cached["source_review_reason"]
+            short.teaching_diagnostics = cached["teaching_diagnostics"]
+            short.review_repair_reasons = cached["review_repair_reasons"]
+        draft = StoryboardDraft.model_validate(cached["draft"]) if cached else attach_evidence(await asyncio.to_thread(self.model.generate, ModelStoryboard, task, cancel, valid), segments)
         valid(draft)
         short.timings["generation_seconds"] = time.monotonic() - model_start
         await self.stage(lesson, "validating source references", short, "validating")
         validation_start = time.monotonic()
         if not cached:
-            draft = await self.reviewed(draft, task, segments, valid, cancel)
-            self.store.cache_put(short_key, draft.model_dump())
+            draft = await self.reviewed(draft, task, segments, valid, cancel, short, lesson)
+            self.cache_draft(short_key, draft, short)
         short.timings["validation_seconds"] = time.monotonic() - validation_start
         await self.stage(lesson, "generating local speech", short, "synthesizing")
         speech_start = time.monotonic()
@@ -417,8 +469,8 @@ class Jobs:
                     raise
                 task["task"] += " The speech exceeded 40 seconds. Shorten to 40 to 50 words."
                 draft = attach_evidence(await asyncio.to_thread(self.model.generate, ModelStoryboard, task, cancel, valid), segments)
-                draft = await self.reviewed(draft, task, segments, valid, cancel)
-                self.store.cache_put(short_key, draft.model_dump())
+                draft = await self.reviewed(draft, task, segments, valid, cancel, short, lesson)
+                self.cache_draft(short_key, draft, short)
         else:
             raise AppError("SPEECH_DURATION", "Speech could not fit the short duration limit.", 422)
         check_cancel(cancel)
@@ -458,6 +510,7 @@ class Jobs:
         else:
             preceding = sum(s.measured_duration_ms + (20000 if s.question else 0) for s in lesson.shorts[:index]) / 1000
             lesson.metrics[f"waiting_before_short_{index + 1}_seconds"] = max(0, elapsed - lesson.metrics.get("first_playable_seconds", elapsed) - preceding)
+        record_coverage(lesson, short)
         lesson.status = "partially_ready"
         lesson.job.stage_timings = {name: sum(s.timings.get(name, 0) for s in lesson.shorts)
                                    for name in ("generation_seconds", "validation_seconds", "speech_seconds", "storyboard_compile_seconds")}

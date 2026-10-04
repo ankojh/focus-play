@@ -483,6 +483,77 @@
         ],
         "title": "Connection"
       },
+      "CoverageEntry": {
+        "properties": {
+          "short_id": {
+            "type": "string",
+            "title": "Short Id"
+          },
+          "concept_id": {
+            "type": "string",
+            "title": "Concept Id"
+          },
+          "learning_outcome": {
+            "type": "string",
+            "maxLength": 180,
+            "title": "Learning Outcome"
+          },
+          "teaching_role": {
+            "type": "string",
+            "enum": [
+              "foundation",
+              "mechanism",
+              "worked_example",
+              "comparison",
+              "misconception",
+              "application",
+              "practice",
+              "recap"
+            ],
+            "title": "Teaching Role"
+          },
+          "claim_summary": {
+            "type": "string",
+            "maxLength": 240,
+            "title": "Claim Summary"
+          },
+          "evidence_segment_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Evidence Segment Ids"
+          },
+          "example_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Example Id"
+          },
+          "adds_coverage": {
+            "type": "boolean",
+            "title": "Adds Coverage",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "short_id",
+          "concept_id",
+          "learning_outcome",
+          "teaching_role",
+          "claim_summary",
+          "evidence_segment_ids"
+        ],
+        "title": "CoverageEntry"
+      },
       "DiagramNode": {
         "properties": {
           "id": {
@@ -687,6 +758,55 @@
         ],
         "title": "EvidenceRef"
       },
+      "ExampleRecord": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,19}$",
+            "title": "Id"
+          },
+          "entities": {
+            "items": {
+              "type": "string",
+              "maxLength": 60,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 4,
+            "minItems": 1,
+            "title": "Entities"
+          },
+          "facts": {
+            "items": {
+              "type": "string",
+              "maxLength": 240,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 4,
+            "minItems": 1,
+            "title": "Facts"
+          },
+          "evidence_segment_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 4,
+            "minItems": 1,
+            "title": "Evidence Segment Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "entities",
+          "facts",
+          "evidence_segment_ids"
+        ],
+        "title": "ExampleRecord"
+      },
       "ExplanationRequest": {
         "properties": {
           "kind": {
@@ -846,6 +966,42 @@
       },
       "Lesson": {
         "properties": {
+          "teaching_plan_version": {
+            "type": "integer",
+            "enum": [
+              1,
+              2
+            ],
+            "title": "Teaching Plan Version",
+            "default": 1
+          },
+          "examples": {
+            "items": {
+              "$ref": "#/components/schemas/ExampleRecord"
+            },
+            "type": "array",
+            "maxItems": 2,
+            "title": "Examples",
+            "default": []
+          },
+          "coverage_history": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageEntry"
+            },
+            "type": "array",
+            "maxItems": 64,
+            "title": "Coverage History",
+            "default": []
+          },
+          "plan_diagnostics": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "title": "Plan Diagnostics",
+            "default": []
+          },
           "id": {
             "type": "string",
             "title": "Id"
@@ -1014,6 +1170,109 @@
       },
       "Objective": {
         "properties": {
+          "concept_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,19}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Concept Id"
+          },
+          "learning_outcome": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 180,
+                "minLength": 10
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Learning Outcome"
+          },
+          "teaching_role": {
+            "type": "string",
+            "enum": [
+              "foundation",
+              "mechanism",
+              "worked_example",
+              "comparison",
+              "misconception",
+              "application",
+              "practice",
+              "recap"
+            ],
+            "title": "Teaching Role",
+            "default": "foundation"
+          },
+          "dependency_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 4,
+            "title": "Dependency Ids",
+            "default": []
+          },
+          "relevance": {
+            "type": "string",
+            "maxLength": 180,
+            "title": "Relevance",
+            "default": ""
+          },
+          "evidence_segment_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 4,
+            "title": "Evidence Segment Ids",
+            "default": []
+          },
+          "curriculum_role": {
+            "type": "string",
+            "enum": [
+              "core",
+              "extension",
+              "closing"
+            ],
+            "title": "Curriculum Role",
+            "default": "core"
+          },
+          "target_duration_ms": {
+            "type": "integer",
+            "maximum": 40000.0,
+            "minimum": 1000.0,
+            "title": "Target Duration Ms",
+            "default": 40000
+          },
+          "example_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Example Id"
+          },
+          "visual_intent": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Visual Intent",
+            "default": ""
+          },
+          "checkpoint": {
+            "type": "boolean",
+            "title": "Checkpoint",
+            "default": false
+          },
           "title": {
             "type": "string",
             "maxLength": 150,
@@ -1491,6 +1750,106 @@
       },
       "Short": {
         "properties": {
+          "concept_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Concept Id"
+          },
+          "learning_outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Learning Outcome"
+          },
+          "teaching_role": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "foundation",
+                  "mechanism",
+                  "worked_example",
+                  "comparison",
+                  "misconception",
+                  "application",
+                  "practice",
+                  "recap"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Teaching Role"
+          },
+          "curriculum_role": {
+            "type": "string",
+            "enum": [
+              "core",
+              "extension",
+              "closing"
+            ],
+            "title": "Curriculum Role",
+            "default": "core"
+          },
+          "example_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Example Id"
+          },
+          "source_review_status": {
+            "type": "string",
+            "enum": [
+              "unchecked",
+              "model_supported"
+            ],
+            "title": "Source Review Status",
+            "default": "unchecked"
+          },
+          "source_review_reason": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Source Review Reason",
+            "default": ""
+          },
+          "teaching_diagnostics": {
+            "items": {
+              "type": "string",
+              "maxLength": 300,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 8,
+            "title": "Teaching Diagnostics",
+            "default": []
+          },
+          "review_repair_reasons": {
+            "items": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "type": "array",
+            "maxItems": 2,
+            "title": "Review Repair Reasons",
+            "default": []
+          },
           "storyboard_version": {
             "type": "integer",
             "enum": [

@@ -1,0 +1,66 @@
+{
+  "provenance": "Original CC0 teaching material and hand-authored reference outlines. Not live model outputs or YouTube results.",
+  "cases": [
+    {
+      "id": "technical",
+      "goal": "Explain indexed lookups and their trade-offs",
+      "knowledgeable": "I already understand table scans and index key mappings",
+      "passage": "A customer table contains Maya with customer key 7 and Ravi with customer key 9. An index maps customer keys to row locations. Looking up key 7 uses the matching index entry to locate Maya's row. A table scan tests candidate rows instead. An index takes storage space and must be updated when indexed values change. The query planner chooses whether to use an index; an index does not guarantee every query is faster.",
+      "beginner": [
+        ["mapping", "Explain how an index maps customer keys to rows", "mechanism", []],
+        ["lookup", "Trace key 7 through the index to Maya's row", "worked_example", ["mapping"]],
+        ["tradeoff", "Predict what changes when an indexed key is updated", "application", ["lookup"]],
+        ["recall", "Recall the mapping and maintenance trade-off", "recap", ["mapping", "tradeoff"]]
+      ],
+      "advanced": [
+        ["maintenance", "Predict what changes when an indexed key is updated", "application", []],
+        ["guarantee", "Explain why an index does not guarantee faster queries", "misconception", ["maintenance"]]
+      ],
+      "example": {"id": "customers", "entities": ["Maya"], "facts": ["A customer table contains Maya with customer key 7 and Ravi with customer key 9."]},
+      "before_sample": "An index maps keys to rows. It helps you find matching data. An index connects search keys with table rows. A key can point to a matching row.",
+      "after_sample": "Trace customer key 7: the matching index entry locates Maya's row, instead of testing candidate rows in a scan. Now predict what an indexed key update requires: the index must be updated too. That maintenance and extra storage are trade-offs; an index is not a guarantee that every query is faster.",
+      "baseline_weaknesses": ["Repeated mapping paraphrases add no new coverage", "No causal worked lookup", "No maintenance application or conditional guarantee"]
+    },
+    {
+      "id": "conceptual",
+      "goal": "Distinguish correlation from a causal explanation",
+      "knowledgeable": "I know correlation means two variables vary together",
+      "passage": "Correlation means two variables vary together; it does not establish that one causes the other. In a town, ice cream sales and swimming visits both rise during warm weather. Warm weather can influence both, so their association alone does not show that ice cream causes swimming. A causal explanation must account for alternative explanations; this example alone cannot establish a causal effect.",
+      "beginner": [
+        ["association", "Explain what correlation establishes and what it does not", "foundation", []],
+        ["weather", "Trace how warm weather can influence both variables", "worked_example", ["association"]],
+        ["inference", "Choose whether the association alone supports a causal claim", "application", ["weather"]]
+      ],
+      "advanced": [
+        ["alternative", "Identify warm weather as an alternative explanation", "comparison", []],
+        ["limits", "Explain why this example cannot establish a causal effect", "misconception", ["alternative"]]
+      ],
+      "baseline_weaknesses": ["Definition-only summaries do not expose the shared influence", "An unsupported causal conclusion must fail source review"]
+    },
+    {
+      "id": "practical",
+      "goal": "Choose when and how to water a container plant",
+      "knowledgeable": "I already check the soil surface before watering",
+      "passage": "Check whether the top layer of a container plant's soil is dry before watering. If it is still moist, wait and check again rather than watering on a fixed daily schedule. For a dry container, water slowly until excess begins to leave the drainage holes. Allow excess water to drain and do not leave the container sitting in standing water. These instructions assume a container with drainage holes and do not specify a universal volume or daily interval.",
+      "beginner": [
+        ["check", "Identify the soil condition to check before watering", "foundation", []],
+        ["drain", "Describe how to water a dry container with drainage holes", "mechanism", ["check"]],
+        ["decision", "Choose whether to water when the soil is still moist", "practice", ["check", "drain"]]
+      ],
+      "advanced": [
+        ["drainage", "Identify the drainage conditions for a watered container", "mechanism", []],
+        ["schedule", "Distinguish a soil-based decision from a fixed daily schedule", "comparison", ["drainage"]]
+      ],
+      "baseline_weaknesses": ["Fixed volume or daily guarantees are unsupported", "A procedure needs conditions and an observable decision"]
+    },
+    {
+      "id": "narrow",
+      "goal": "Explain what the UTC abbreviation stands for",
+      "knowledgeable": "I only need the expansion of UTC",
+      "passage": "UTC stands for Coordinated Universal Time. This passage provides the abbreviation's expansion only, not time-zone conversion rules or implementation details.",
+      "beginner": [["expansion", "Recall that UTC stands for Coordinated Universal Time", "foundation", []]],
+      "advanced": [["expansion", "Recall that UTC stands for Coordinated Universal Time", "foundation", []]],
+      "baseline_weaknesses": ["No evidence for adjacent curriculum", "A long requested budget must not cause duplicate definitions"]
+    }
+  ]
+}

@@ -1,4 +1,13 @@
 {
+  "concept_id": null,
+  "learning_outcome": null,
+  "teaching_role": null,
+  "curriculum_role": "core",
+  "example_id": null,
+  "source_review_status": "unchecked",
+  "source_review_reason": "",
+  "teaching_diagnostics": [],
+  "review_repair_reasons": [],
   "storyboard_version": 2,
   "timeline_compiler_version": "1",
   "id": "storyboard_fixture",

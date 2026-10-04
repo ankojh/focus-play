@@ -205,6 +205,31 @@ export interface components {
             /** Target */
             target: string;
         };
+        /** CoverageEntry */
+        CoverageEntry: {
+            /** Short Id */
+            short_id: string;
+            /** Concept Id */
+            concept_id: string;
+            /** Learning Outcome */
+            learning_outcome: string;
+            /**
+             * Teaching Role
+             * @enum {string}
+             */
+            teaching_role: "foundation" | "mechanism" | "worked_example" | "comparison" | "misconception" | "application" | "practice" | "recap";
+            /** Claim Summary */
+            claim_summary: string;
+            /** Evidence Segment Ids */
+            evidence_segment_ids: string[];
+            /** Example Id */
+            example_id?: string | null;
+            /**
+             * Adds Coverage
+             * @default true
+             */
+            adds_coverage: boolean;
+        };
         /** DiagramNode */
         DiagramNode: {
             /** Id */
@@ -271,6 +296,17 @@ export interface components {
             end_ms?: number | null;
             /** Quote */
             quote: string;
+        };
+        /** ExampleRecord */
+        ExampleRecord: {
+            /** Id */
+            id: string;
+            /** Entities */
+            entities: string[];
+            /** Facts */
+            facts: string[];
+            /** Evidence Segment Ids */
+            evidence_segment_ids: string[];
         };
         /** ExplanationRequest */
         ExplanationRequest: {
@@ -353,6 +389,27 @@ export interface components {
         };
         /** Lesson */
         Lesson: {
+            /**
+             * Teaching Plan Version
+             * @default 1
+             * @enum {integer}
+             */
+            teaching_plan_version: 1 | 2;
+            /**
+             * Examples
+             * @default []
+             */
+            examples: components["schemas"]["ExampleRecord"][];
+            /**
+             * Coverage History
+             * @default []
+             */
+            coverage_history: components["schemas"]["CoverageEntry"][];
+            /**
+             * Plan Diagnostics
+             * @default []
+             */
+            plan_diagnostics: string[];
             /** Id */
             id: string;
             request: components["schemas"]["SavedLearningRequest"];
@@ -439,6 +496,54 @@ export interface components {
         };
         /** Objective */
         Objective: {
+            /** Concept Id */
+            concept_id?: string | null;
+            /** Learning Outcome */
+            learning_outcome?: string | null;
+            /**
+             * Teaching Role
+             * @default foundation
+             * @enum {string}
+             */
+            teaching_role: "foundation" | "mechanism" | "worked_example" | "comparison" | "misconception" | "application" | "practice" | "recap";
+            /**
+             * Dependency Ids
+             * @default []
+             */
+            dependency_ids: string[];
+            /**
+             * Relevance
+             * @default
+             */
+            relevance: string;
+            /**
+             * Evidence Segment Ids
+             * @default []
+             */
+            evidence_segment_ids: string[];
+            /**
+             * Curriculum Role
+             * @default core
+             * @enum {string}
+             */
+            curriculum_role: "core" | "extension" | "closing";
+            /**
+             * Target Duration Ms
+             * @default 40000
+             */
+            target_duration_ms: number;
+            /** Example Id */
+            example_id?: string | null;
+            /**
+             * Visual Intent
+             * @default
+             */
+            visual_intent: string;
+            /**
+             * Checkpoint
+             * @default false
+             */
+            checkpoint: boolean;
             /** Title */
             title: string;
             /**
@@ -627,6 +732,41 @@ export interface components {
         };
         /** Short */
         Short: {
+            /** Concept Id */
+            concept_id?: string | null;
+            /** Learning Outcome */
+            learning_outcome?: string | null;
+            /** Teaching Role */
+            teaching_role?: ("foundation" | "mechanism" | "worked_example" | "comparison" | "misconception" | "application" | "practice" | "recap") | null;
+            /**
+             * Curriculum Role
+             * @default core
+             * @enum {string}
+             */
+            curriculum_role: "core" | "extension" | "closing";
+            /** Example Id */
+            example_id?: string | null;
+            /**
+             * Source Review Status
+             * @default unchecked
+             * @enum {string}
+             */
+            source_review_status: "unchecked" | "model_supported";
+            /**
+             * Source Review Reason
+             * @default
+             */
+            source_review_reason: string;
+            /**
+             * Teaching Diagnostics
+             * @default []
+             */
+            teaching_diagnostics: string[];
+            /**
+             * Review Repair Reasons
+             * @default []
+             */
+            review_repair_reasons: string[];
             /**
              * Storyboard Version
              * @default 1
