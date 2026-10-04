@@ -99,6 +99,7 @@ class StubModel:
         if contract is LessonPlan:
             result=LessonPlan(sufficient_evidence=True,reason="",objectives=[Objective(title=f"Learning point {i}",template=t,prerequisites=[]) for i,t in enumerate(["process","comparison","example"])])
         elif contract is SupportCheck:result=SupportCheck(supported=True,reason="Test only")
+        elif contract is CandidateRanking:result=CandidateRanking(scores=[CandidateScore(video_id=c["video_id"],relevance=5,level_fit=5,teaching=5,density=5,captions=5,reason="Test only") for c in task["candidates"]])
         else:
             draft=draft_for([TranscriptSegment.model_validate(s) for s in task["segments"]],task["template"],task["question_required"])
             body=draft.model_dump();body.pop("actions")
@@ -133,7 +134,7 @@ class StubYouTube:
     def transcript(self,candidate,cancel):
         check_cancel(cancel);self.fetches.append(candidate["video_id"])
         original=source();sid="src_test_"+candidate["video_id"]
-        return original.model_copy(update={"id":sid,"segments":[segment.model_copy(update={"id":f"{sid}_{i}","source_id":sid}) for i,segment in enumerate(original.segments)],"source_type":"youtube","video_id":candidate["video_id"],"url":f"https://www.youtube.com/watch?v={candidate['video_id']}","channel":candidate["channel"],"transcript_provider":"youtube-transcript-api","provenance":"Synthetic test transcript. Not a live result."})
+        return original.model_copy(update={"id":sid,"segments":[segment.model_copy(update={"id":f"{sid}_{i}","source_id":sid}) for i,segment in enumerate(original.segments)],"source_type":"youtube","video_id":candidate["video_id"],"url":f"https://www.youtube.com/watch?v={candidate['video_id']}","channel":candidate["channel"],"transcript_provider":"supadata","provenance":"Synthetic test transcript. Not a live result."})
 
 
 def wait_for(client,lid,state="complete"):

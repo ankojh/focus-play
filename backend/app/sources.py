@@ -91,23 +91,54 @@ def retrieve(sources: list[Source], goal: str, limit: int = 12) -> list[Transcri
     return selected
 
 
-def search_youtube(query: str, key: str) -> list[dict]:
-    if not key:
-        raise AppError("YOUTUBE_KEY_MISSING", "YouTube search needs YOUTUBE_API_KEY in the server .env file. Add the key, restart the server, then retry.", 503)
+SEARCH_RESULTS = 15
+# Shorts rarely teach a full point; long lectures exceed the transcript bounds.
+MIN_SECONDS, MAX_SECONDS = 61, 1800
+
+
+def youtube_get(path: str, params: dict) -> httpx.Response:
     try:
-        response = httpx.get("https://www.googleapis.com/youtube/v3/search", params={"key": key, "part": "snippet", "type": "video", "maxResults": 6, "q": query}, timeout=15, follow_redirects=False, trust_env=False)
+        response = httpx.get(f"https://www.googleapis.com/youtube/v3/{path}", params=params, timeout=15, follow_redirects=False, trust_env=False)
     except httpx.HTTPError:
         raise AppError("SOURCE_NETWORK_FAILED", "YouTube search failed. Check the internet connection, then retry.", 503)
     if response.status_code == 403:
         raise AppError("YOUTUBE_QUOTA_OR_ACCESS", "YouTube rejected the request. Check the API quota and key, then retry.", 503)
     if not response.is_success:
         raise AppError("SOURCE_SEARCH_FAILED", "YouTube search failed. Check the server API key, then retry.", 503)
+    return response
+
+
+def iso_seconds(value: str) -> int | None:
+    match = re.fullmatch(r"P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?", value or "")
+    if not match or value in {"P", "PT"}:
+        return None
+    days, hours, minutes, seconds = (int(x or 0) for x in match.groups())
+    return ((days * 24 + hours) * 60 + minutes) * 60 + seconds
+
+
+def search_youtube(query: str, key: str) -> list[dict]:
+    if not key:
+        raise AppError("YOUTUBE_KEY_MISSING", "YouTube search needs YOUTUBE_API_KEY in the server .env file. Add the key, restart the server, then retry.", 503)
+    # search.list costs 100 quota units regardless of maxResults; videos.list costs 1.
+    response = youtube_get("search", {"key": key, "part": "snippet", "type": "video", "maxResults": SEARCH_RESULTS, "relevanceLanguage": "en", "q": query})
     results = []
     try:
-        for item in response.json().get("items", [])[:6]:
+        for item in response.json().get("items", [])[:SEARCH_RESULTS]:
             vid = item.get("id", {}).get("videoId", "")
-            if re.fullmatch(r"[A-Za-z0-9_-]{11}", vid):
+            if re.fullmatch(r"[A-Za-z0-9_-]{11}", vid) and item["snippet"].get("liveBroadcastContent", "none") == "none":
                 results.append({"video_id": vid, "title": html.unescape(item["snippet"]["title"]), "channel": html.unescape(item["snippet"]["channelTitle"]), "url": f"https://www.youtube.com/watch?v={vid}", "transcript_status": "needed"})
     except (ValueError,KeyError,TypeError,AttributeError):
         raise AppError("SOURCE_SEARCH_FAILED", "YouTube returned invalid search data. Retry to search again.",503)
-    return results
+    if not results:
+        return results
+    details = youtube_get("videos", {"key": key, "part": "contentDetails", "id": ",".join(r["video_id"] for r in results)})
+    try:
+        durations = {item["id"]: iso_seconds(item["contentDetails"]["duration"]) for item in details.json().get("items", [])}
+    except (ValueError,KeyError,TypeError,AttributeError):
+        raise AppError("SOURCE_SEARCH_FAILED", "YouTube returned invalid video data. Retry to search again.",503)
+    kept = []
+    for result in results:
+        seconds = durations.get(result["video_id"])
+        if seconds is not None and MIN_SECONDS <= seconds <= MAX_SECONDS:
+            kept.append({**result, "duration_seconds": seconds})
+    return kept

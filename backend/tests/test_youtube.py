@@ -1,7 +1,6 @@
 import json
 import threading
 import time
-from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 from app.config import Settings
@@ -71,7 +70,8 @@ def test_unavailable_captions_try_other_videos_with_bounded_limits(tmp_path):
         def transcript(self,candidate,cancel):
             self.fetches.append(candidate['video_id'])
             raise AppError('TRANSCRIPT_UNAVAILABLE','No captions.')
-    settings=Settings(data=tmp_path);provider=Missing();model=StubModel()
+    # Each transcript request costs a credit, so attempts per round stop at rank_candidates.
+    settings=Settings(data=tmp_path,rank_candidates=4);provider=Missing();model=StubModel()
     with TestClient(create_app(settings,model,StubSpeech(settings),provider)) as client:
         lid=client.post('/api/lessons',json=request_for(None)).json()['id']
         failed=wait_for(client,lid,'failed')
@@ -142,13 +142,13 @@ def test_provider_cannot_supply_an_import_under_the_new_flow(tmp_path):
         assert model.calls==0
 
 
-def fetched(rows):
-    return SimpleNamespace(video_id='video000000',language_code='en',is_generated=True,to_raw_data=lambda:rows)
+def fetched(rows,lang='en'):
+    return {'content':rows,'lang':lang,'availableLangs':[lang]}
 
 
 def test_caption_passages_keep_video_metadata_and_supplied_time_bounds():
     text='An index maps a search key to matching rows in a database table.'
-    rows=[{'text':text,'start':1+i*5,'duration':4} for i in range(6)]
+    rows=[{'text':text,'offset':1000+i*5000,'duration':4000,'lang':'en'} for i in range(6)]
     source=source_from_transcript({'video_id':'video000000','title':'Test captions','channel':'Test channel'},fetched(rows))
     require_youtube(source)
     assert source.channel=='Test channel' and source.url=='https://www.youtube.com/watch?v=video000000'
@@ -157,7 +157,90 @@ def test_caption_passages_keep_video_metadata_and_supplied_time_bounds():
     assert all(len(s.text)<=280 and s.end_ms>s.start_ms for s in source.segments)
 
 
-@pytest.mark.parametrize('timing',[{'start':-1,'duration':2},{'start':1,'duration':0},{'start':float('nan'),'duration':2}])
+@pytest.mark.parametrize('timing',[{'offset':-1,'duration':2000},{'offset':1000,'duration':0},{'offset':float('nan'),'duration':2000}])
 def test_invalid_caption_timing_is_rejected(timing):
     with pytest.raises(AppError,match='timing'):
         source_from_transcript({'video_id':'video000000','title':'Test','channel':'Test'},fetched([{'text':'A real caption.',**timing}]))
+
+
+def test_non_english_transcript_is_unavailable():
+    with pytest.raises(AppError,match='English') as error:
+        source_from_transcript({'video_id':'video000000','title':'Test','channel':'Test'},fetched([{'text':'Una frase.','offset':0,'duration':1000}],'es'))
+    assert error.value.code=='TRANSCRIPT_UNAVAILABLE'
+
+
+@pytest.mark.parametrize('status,code',[(206,'TRANSCRIPT_UNAVAILABLE'),(404,'TRANSCRIPT_UNAVAILABLE'),(202,'TRANSCRIPT_UNAVAILABLE'),
+    (401,'TRANSCRIPT_ACCESS_REQUIRED'),(402,'TRANSCRIPT_ACCESS_REQUIRED'),(429,'TRANSCRIPT_ACCESS_REQUIRED')])
+def test_supadata_statuses_skip_the_video_or_stop_for_access(monkeypatch,status,code):
+    import httpx
+    from app import youtube
+    sent=[]
+    def get(url,**kw):
+        sent.append((url,kw));return httpx.Response(status,json={'jobId':'job'} if status==202 else {'error':'test'})
+    monkeypatch.setattr(youtube,'SUPADATA_INTERVAL',0);monkeypatch.setattr(httpx,'get',get)
+    with pytest.raises(AppError) as error:youtube.fetch_supadata('video000000','test-key',threading.Event())
+    assert error.value.code==code
+    url,kw=sent[0]
+    assert url==youtube.SUPADATA_URL and kw['headers']=={'x-api-key':'test-key'} and kw['params']['mode']=='native'
+
+
+def test_missing_supadata_key_stops_without_a_request(monkeypatch):
+    import httpx
+    from app import youtube
+    monkeypatch.setattr(httpx,'get',lambda *a,**kw:pytest.fail('No request without a key.'))
+    with pytest.raises(AppError,match='SUPADATA_API_KEY'):youtube.fetch_supadata('video000000','',threading.Event())
+
+
+def test_search_drops_shorts_long_videos_and_live_streams(monkeypatch):
+    import httpx
+    from app.sources import search_youtube, iso_seconds
+    items=[{'id':{'videoId':f'video00000{i}'},'snippet':{'title':'T &amp; U','channelTitle':'C','liveBroadcastContent':'live' if i==3 else 'none'}} for i in range(4)]
+    durations={'video000000':'PT45S','video000001':'PT8M5S','video000002':'PT1H2M','video000003':'PT10M'}
+    def get(url,params,**kw):
+        if url.endswith('/search'):return httpx.Response(200,json={'items':items})
+        assert params['id']=='video000000,video000001,video000002'
+        return httpx.Response(200,json={'items':[{'id':v,'contentDetails':{'duration':d}} for v,d in durations.items()]})
+    monkeypatch.setattr(httpx,'get',get)
+    results=search_youtube('database','test-key')
+    assert [(r['video_id'],r['duration_seconds'],r['title']) for r in results]==[('video000001',485,'T & U')]
+    assert iso_seconds('P1DT1S')==86401 and iso_seconds('PT')is None and iso_seconds('bad')is None
+
+
+def test_pick_weights_scores_and_limits_relevance_and_channels():
+    from app.contracts import CandidateRanking, CandidateScore
+    from app.ranking import pick
+    def score(vid,relevance,rest):return CandidateScore(video_id=vid,relevance=relevance,level_fit=rest,teaching=rest,density=rest,captions=rest,reason='Test only')
+    fetched=[({'video_id':v,'channel':c},v) for v,c in [('a','one'),('b','one'),('c','one'),('d','two'),('e','three'),('f','four')]]
+    ranking=CandidateRanking(scores=[score('a',5,5),score('b',5,4),score('c',5,3),score('d',2,5),score('e',4,2),score('f',5,1)])
+    # c loses to the channel cap, d to the relevance floor, and f to the level fit floor.
+    assert pick(ranking,fetched)==['a','b','e']
+
+
+def test_ranking_failure_keeps_youtube_order(tmp_path):
+    from app.contracts import CandidateRanking
+    class NoRanking(StubModel):
+        def generate(self,contract,task,cancel,validate=None):
+            if contract is CandidateRanking:raise AppError('MODEL_DATA_INVALID','Invalid ranking.',422)
+            return super().generate(contract,task,cancel,validate)
+    settings=Settings(data=tmp_path);provider=Candidates()
+    with TestClient(create_app(settings,NoRanking(),StubSpeech(settings),provider)) as client:
+        lid=client.post('/api/lessons',json=request_for(None)).json()['id']
+        ready=wait_for(client,lid)
+        assert [s['video_id'] for s in ready['sources']]==['video000000','video000001','video000002']
+        assert ready['video_rankings']==[]
+
+
+def test_off_topic_ranking_searches_again_and_saves_scores(tmp_path):
+    from app.contracts import CandidateRanking
+    class OffTopicFirst(StubModel):
+        def generate(self,contract,task,cancel,validate=None):
+            result=super().generate(contract,task,cancel,validate)
+            if contract is CandidateRanking and task['candidates'][0]['video_id']=='video000000':
+                for s in result.scores:s.relevance=1
+            return result
+    settings=Settings(data=tmp_path);provider=Candidates()
+    with TestClient(create_app(settings,OffTopicFirst(),StubSpeech(settings),provider)) as client:
+        lid=client.post('/api/lessons',json=request_for(None)).json()['id']
+        ready=wait_for(client,lid)
+        assert len(provider.searches)==2 and {s['video_id'] for s in ready['sources']}=={'video000006','video000007'}
+        assert len(ready['video_rankings'])==12

@@ -18,6 +18,9 @@ class Settings:
     voice: str = os.getenv("KOKORO_VOICE", "af_heart")
     macos_voice: str = os.getenv("MACOS_VOICE", "Samantha")
     youtube_key: str = os.getenv("YOUTUBE_API_KEY", "")
+    supadata_key: str = os.getenv("SUPADATA_API_KEY", "")
+    # Transcript requests per search round. Each request costs one Supadata credit.
+    rank_candidates: int = int(os.getenv("RANK_CANDIDATES", "8"))
     queue_size: int = 8
     def __post_init__(self):
         url = urlparse(self.ollama_url)
@@ -27,6 +30,8 @@ class Settings:
             raise ValueError("Use an installed local model and a supported local speech provider.")
         if not 2048 <= self.context <= 16384 or not 512 <= self.predict <= 4096:
             raise ValueError("Model context or output limit is outside the supported range.")
+        if not 2 <= self.rank_candidates <= 15:
+            raise ValueError("RANK_CANDIDATES must be between 2 and 15.")
         self.data = self.data.resolve()
         self.data.mkdir(parents=True, exist_ok=True)
         for folder in ["audio", "transcripts", "cache", "hf"]:

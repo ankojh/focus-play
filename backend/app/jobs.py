@@ -5,9 +5,10 @@ import json
 import threading
 import time
 import uuid
-from .contracts import Job, Lesson, LessonPlan, Scene, SceneAction, Short, ShortDraft, ErrorInfo, ModelShort, SavedLearningRequest
+from .contracts import Job, Lesson, LessonPlan, Scene, SceneAction, Short, ShortDraft, ErrorInfo, ModelShort, SavedLearningRequest, CandidateRanking
 from .errors import AppError, Cancelled
 from .providers import check_cancel
+from .ranking import KEEP, pick, ranking_task, validator
 from .sources import retrieve
 from .validation import validate_draft, verify_support, planned_duration, attach_evidence, refine_cues, diagram_evidence
 from .youtube import YouTubeSources, queries, require_youtube
@@ -199,14 +200,17 @@ class Jobs:
         await self.stage(lesson,"Searching YouTube")
         query=queries(lesson.request.goal,lesson.request.prior_knowledge,focus)[round_number]
         candidates=await asyncio.to_thread(self.youtube.search,query)
-        added=0
-        for candidate in candidates[:6]:
+        # Each transcript request costs one provider credit, including videos without captions.
+        limit=self.settings.rank_candidates
+        fetched,attempts=[],0
+        for candidate in candidates:
             check_cancel(cancel)
             if candidate["video_id"] in tried:
                 continue
-            if len(tried)>=8:
+            if attempts>=limit or len(tried)>=2*limit:
                 break
             tried.add(candidate["video_id"])
+            attempts+=1
             await self.stage(lesson,"Reading video transcripts")
             try:
                 source=await asyncio.to_thread(self.youtube.transcript,candidate,cancel)
@@ -217,13 +221,31 @@ class Jobs:
                 raise
             check_cancel(cancel)
             if not any(s.id==source.id for s in lesson.sources):
-                self.store.put_source(source)
-                lesson.sources.append(source)
-                self.store.save(lesson)
-                added+=1
-            if added==2:
-                break
-        return added
+                fetched.append((candidate,source))
+        chosen=await self.rank(lesson,fetched,cancel,focus)
+        for source in chosen:
+            self.store.put_source(source)
+            lesson.sources.append(source)
+        self.store.save(lesson)
+        return len(chosen)
+
+    async def rank(self,lesson,fetched,cancel,focus=None):
+        if len(fetched)<=1:
+            return [s for _,s in fetched]
+        await self.stage(lesson,"Choosing the best videos")
+        task=ranking_task(lesson.request,fetched,focus)
+        key=cache_key({"stage":"rank","model":self.settings.model,"task":task})
+        cached=self.store.cache_get(key)
+        try:
+            ranking=CandidateRanking.model_validate(cached) if cached else await asyncio.to_thread(self.model.generate,CandidateRanking,task,cancel,validator(fetched))
+        except AppError:
+            # Ranking only improves the choice. Keep YouTube's order when the model cannot rank.
+            return [s for _,s in fetched][:KEEP]
+        check_cancel(cancel)
+        if not cached:
+            self.store.cache_put(key,ranking.model_dump())
+        lesson.video_rankings.extend(ranking.scores)
+        return pick(ranking,fetched)
 
     def context(self,lesson,focus=None):
         sources=self.youtube_sources(lesson)

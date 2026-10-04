@@ -179,6 +179,23 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** CandidateScore */
+        CandidateScore: {
+            /** Video Id */
+            video_id: string;
+            /** Relevance */
+            relevance: number;
+            /** Level Fit */
+            level_fit: number;
+            /** Teaching */
+            teaching: number;
+            /** Density */
+            density: number;
+            /** Captions */
+            captions: number;
+            /** Reason */
+            reason: string;
+        };
         /** Connection */
         Connection: {
             /** Id */
@@ -367,6 +384,11 @@ export interface components {
             metrics: {
                 [key: string]: number;
             };
+            /**
+             * Video Rankings
+             * @default []
+             */
+            video_rankings: components["schemas"]["CandidateScore"][];
         };
         /** NarrationUnit */
         NarrationUnit: {
@@ -518,6 +540,8 @@ export interface components {
             channel: string;
             /** Url */
             url: string;
+            /** Duration Seconds */
+            duration_seconds?: number | null;
             /**
              * Transcript Status
              * @default needed
@@ -627,7 +651,7 @@ export interface components {
             /** Channel */
             channel?: string | null;
             /** Transcript Provider */
-            transcript_provider?: "youtube-transcript-api" | null;
+            transcript_provider?: ("youtube-transcript-api" | "supadata") | null;
             /**
              * Transcript Status
              * @enum {string}

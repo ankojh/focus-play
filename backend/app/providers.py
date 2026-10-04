@@ -91,6 +91,11 @@ class Ollama:
                     variants.append(variant)
                 if variants:
                     schema["$defs"][name]={"oneOf":variants}
+        if contract.__name__ == "CandidateRanking":
+            # Scores can only name supplied candidates, once each.
+            ids=[c["video_id"] for c in task["candidates"]]
+            schema["$defs"]["CandidateScore"]["properties"]["video_id"]["enum"]=ids
+            schema["properties"]["scores"]["minItems"]=schema["properties"]["scores"]["maxItems"]=len(ids)
 
         messages = [{"role": "system", "content":
             "You teach introductory computing in clear English. Return JSON matching the supplied schema. "

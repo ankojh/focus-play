@@ -42,7 +42,7 @@ class Source(Contract):
     video_id: str | None = None
     url: str | None = None
     channel: str | None = None
-    transcript_provider: Literal["youtube-transcript-api"] | None = None
+    transcript_provider: Literal["youtube-transcript-api", "supadata"] | None = None
     transcript_status: Literal["available", "needed"]
     provenance: str
     content_hash: str
@@ -186,6 +186,19 @@ class LessonPlan(Contract):
     reason: str = Field(max_length=400)
     objectives: list[Objective] = Field(max_length=8)
 
+# The model scores candidate videos 1 to 5 from their transcripts. Code picks the sources.
+class CandidateScore(Contract):
+    video_id: str
+    relevance: int = Field(ge=1, le=5)
+    level_fit: int = Field(ge=1, le=5)
+    teaching: int = Field(ge=1, le=5)
+    density: int = Field(ge=1, le=5)
+    captions: int = Field(ge=1, le=5)
+    reason: str = Field(min_length=1, max_length=200)
+
+class CandidateRanking(Contract):
+    scores: list[CandidateScore] = Field(min_length=1, max_length=15)
+
 class Job(Contract):
     id: str
     lesson_id: str
@@ -211,6 +224,7 @@ class Lesson(Contract):
     job: Job
     provider_settings: dict = {}
     metrics: dict[str, float] = {}
+    video_rankings: list[CandidateScore] = []
 
 class ProviderHealth(Contract):
     ready: bool
@@ -237,6 +251,7 @@ class SearchItem(Contract):
     title: str
     channel: str
     url: str
+    duration_seconds: int | None = None
     transcript_status: Literal["needed"] = "needed"
 
 class SearchResponse(Contract):

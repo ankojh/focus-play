@@ -56,8 +56,9 @@ def create_app(settings=None, model=None, speech=None, youtube=None):
     @app.get("/api/health", response_model=ProviderHealth)
     async def readiness():
         status=await asyncio.to_thread(health,llm,tts)
-        status.youtube_ready=bool(config.youtube_key)
-        status.youtube_message="YouTube search is configured. Public English captions are checked during lesson preparation." if status.youtube_ready else "Add YOUTUBE_API_KEY to the server .env file and restart the server."
+        missing=[name for name,value in (("YOUTUBE_API_KEY",config.youtube_key),("SUPADATA_API_KEY",config.supadata_key)) if not value]
+        status.youtube_ready=not missing
+        status.youtube_message="YouTube search and Supadata transcripts are configured. English captions are checked during lesson preparation." if status.youtube_ready else f"Add {' and '.join(missing)} to the server .env file and restart the server."
         status.ready=status.ready and status.youtube_ready
         status.message+=" "+status.youtube_message
         return status
