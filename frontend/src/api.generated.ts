@@ -158,6 +158,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/assets/{asset_id}/metadata": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Asset Metadata */
+        get: operations["asset_metadata_api_assets__asset_id__metadata_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assets/{asset_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Asset Content */
+        get: operations["asset_content_api_assets__asset_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/audio/{name}": {
         parameters: {
             query?: never;
@@ -179,6 +213,71 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** Annotation */
+        Annotation: {
+            /** Id */
+            id: string;
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+            /** Label */
+            label: string;
+            /** Segment Id */
+            segment_id: string;
+        };
+        /** AssetRecord */
+        AssetRecord: {
+            /** Id */
+            id: string;
+            /** Content Hash */
+            content_hash: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "image" | "screenshot";
+            /**
+             * Mime Type
+             * @enum {string}
+             */
+            mime_type: "image/png" | "image/jpeg";
+            /** Byte Size */
+            byte_size: number;
+            /** Width */
+            width: number;
+            /** Height */
+            height: number;
+            /** Original Source */
+            original_source: string;
+            /** Creator */
+            creator: string;
+            /** Permission Basis */
+            permission_basis: string;
+            /** Attribution */
+            attribution: string;
+            /** License Url */
+            license_url?: string | null;
+            /** Acquired At */
+            acquired_at: number;
+            /** Managed Filename */
+            managed_filename: string;
+            /** Source Context */
+            source_context: string;
+            /** Illustrative */
+            illustrative: boolean;
+            /**
+             * Status
+             * @default validated
+             * @enum {string}
+             */
+            status: "validated" | "ready" | "missing" | "failed";
+            /**
+             * Failure Reason
+             * @default
+             */
+            failure_reason: string;
+        };
         /** CandidateScore */
         CandidateScore: {
             /** Video Id */
@@ -195,6 +294,131 @@ export interface components {
             captions: number;
             /** Reason */
             reason: string;
+        };
+        /** ChartPayload */
+        ChartPayload: {
+            /**
+             * Chart Kind
+             * @default bar
+             * @constant
+             */
+            chart_kind: "bar";
+            /** Unit */
+            unit: string;
+            /** Axis Label */
+            axis_label: string;
+            /**
+             * Scale Policy
+             * @default zero_inclusive
+             * @constant
+             */
+            scale_policy: "zero_inclusive";
+            /**
+             * Illustrative
+             * @default false
+             */
+            illustrative: boolean;
+            /** Points */
+            points: components["schemas"]["ChartPoint"][];
+        };
+        /** ChartPoint */
+        ChartPoint: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Value */
+            value: number;
+            /** Segment Id */
+            segment_id: string;
+        };
+        /** ChartScene */
+        ChartScene: {
+            /**
+             * Evidence References
+             * @default []
+             */
+            evidence_references: components["schemas"]["EvidenceRef"][];
+            /**
+             * Beat Ids
+             * @default []
+             */
+            beat_ids: string[];
+            /** Actions */
+            actions: components["schemas"]["SceneAction"][];
+            /**
+             * Start Ms
+             * @default 0
+             */
+            start_ms: number;
+            /** End Ms */
+            end_ms: number;
+            /**
+             * Visual Version
+             * @default 1
+             * @constant
+             */
+            visual_version: 1;
+            /** Id */
+            id: string;
+            /** Summary */
+            summary: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "chart";
+            payload: components["schemas"]["ChartPayload"];
+        };
+        /** CodePayload */
+        CodePayload: {
+            /**
+             * Language
+             * @enum {string}
+             */
+            language: "text" | "python" | "sql" | "javascript" | "shell";
+            /** Text */
+            text: string;
+            /** Segment Id */
+            segment_id: string;
+        };
+        /** CodeScene */
+        CodeScene: {
+            /**
+             * Evidence References
+             * @default []
+             */
+            evidence_references: components["schemas"]["EvidenceRef"][];
+            /**
+             * Beat Ids
+             * @default []
+             */
+            beat_ids: string[];
+            /** Actions */
+            actions: components["schemas"]["SceneAction"][];
+            /**
+             * Start Ms
+             * @default 0
+             */
+            start_ms: number;
+            /** End Ms */
+            end_ms: number;
+            /**
+             * Visual Version
+             * @default 1
+             * @constant
+             */
+            visual_version: 1;
+            /** Id */
+            id: string;
+            /** Summary */
+            summary: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "code";
+            payload: components["schemas"]["CodePayload"];
         };
         /** Connection */
         Connection: {
@@ -328,6 +552,63 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** ImagePayload */
+        ImagePayload: {
+            /** Asset Id */
+            asset_id: string;
+            /** Width */
+            width: number;
+            /** Height */
+            height: number;
+            /** Alt */
+            alt: string;
+            /** Caption */
+            caption: string;
+            /**
+             * Annotations
+             * @default []
+             */
+            annotations: components["schemas"]["Annotation"][];
+        };
+        /** ImageScene */
+        ImageScene: {
+            /**
+             * Evidence References
+             * @default []
+             */
+            evidence_references: components["schemas"]["EvidenceRef"][];
+            /**
+             * Beat Ids
+             * @default []
+             */
+            beat_ids: string[];
+            /** Actions */
+            actions: components["schemas"]["SceneAction"][];
+            /**
+             * Start Ms
+             * @default 0
+             */
+            start_ms: number;
+            /** End Ms */
+            end_ms: number;
+            /**
+             * Visual Version
+             * @default 1
+             * @constant
+             */
+            visual_version: 1;
+            /** Id */
+            id: string;
+            /** Summary */
+            summary: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "image";
+            payload: components["schemas"]["ImagePayload"];
+            asset: components["schemas"]["AssetRecord"];
         };
         /** Job */
         Job: {
@@ -636,9 +917,8 @@ export interface components {
             /** Id */
             id?: string | null;
             /**
-             * Kind
-             * @default diagram
-             * @constant
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
              */
             kind: "diagram";
             /**
@@ -798,7 +1078,7 @@ export interface components {
              * Scenes
              * @default []
              */
-            scenes: components["schemas"]["Scene"][];
+            scenes: (components["schemas"]["Scene"] | components["schemas"]["TableScene"] | components["schemas"]["CodeScene"] | components["schemas"]["ChartScene"] | components["schemas"]["ImageScene"])[];
             question?: components["schemas"]["Question"] | null;
             /** Audio Path */
             audio_path?: string | null;
@@ -882,6 +1162,63 @@ export interface components {
         SourceList: {
             /** Sources */
             sources: components["schemas"]["Source"][];
+        };
+        /** TablePayload */
+        TablePayload: {
+            /** Columns */
+            columns: string[];
+            /** Rows */
+            rows: components["schemas"]["TableRow"][];
+            /**
+             * Illustrative
+             * @default false
+             */
+            illustrative: boolean;
+        };
+        /** TableRow */
+        TableRow: {
+            /** Id */
+            id: string;
+            /** Cells */
+            cells: string[];
+        };
+        /** TableScene */
+        TableScene: {
+            /**
+             * Evidence References
+             * @default []
+             */
+            evidence_references: components["schemas"]["EvidenceRef"][];
+            /**
+             * Beat Ids
+             * @default []
+             */
+            beat_ids: string[];
+            /** Actions */
+            actions: components["schemas"]["SceneAction"][];
+            /**
+             * Start Ms
+             * @default 0
+             */
+            start_ms: number;
+            /** End Ms */
+            end_ms: number;
+            /**
+             * Visual Version
+             * @default 1
+             * @constant
+             */
+            visual_version: 1;
+            /** Id */
+            id: string;
+            /** Summary */
+            summary: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "table";
+            payload: components["schemas"]["TablePayload"];
         };
         /** TranscriptSegment */
         TranscriptSegment: {
@@ -1179,6 +1516,68 @@ export interface operations {
             header?: never;
             path: {
                 lid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    asset_metadata_api_assets__asset_id__metadata_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    asset_content_api_assets__asset_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
             };
             cookie?: never;
         };

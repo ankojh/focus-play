@@ -6,10 +6,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse, Response
 
 from .config import Settings
-from .contracts import ExplanationRequest, LearningRequest, Lesson, ProviderHealth, SearchResponse, SourceList
+from .contracts import ExplanationRequest, LearningRequest, Lesson, ProviderHealth, SearchResponse, SourceList, AssetRecord
 from .errors import AppError
 from .jobs import Jobs, cache_key
 from .providers import Ollama, Speech, health
@@ -123,6 +123,18 @@ def create_app(settings=None, model=None, speech=None, youtube=None):
                 yield ": keepalive\n\n"
                 await asyncio.sleep(0.5)
         return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    @app.get("/api/assets/{asset_id}/metadata", response_model=AssetRecord)
+    def asset_metadata(asset_id: str):
+        return jobs.assets.get(asset_id)
+
+    @app.get("/api/assets/{asset_id}")
+    def asset_content(asset_id: str):
+        # Read via no-follow descriptor and validate hash before returning bytes.
+        data, record = jobs.assets.read(asset_id)
+        return Response(data, media_type=record.mime_type, headers={
+            "Cache-Control": "private, max-age=31536000, immutable",
+            "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "default-src 'none'"})
 
     @app.get("/api/audio/{name}")
     def audio(name: str):

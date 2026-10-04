@@ -1,0 +1,965 @@
+{
+  "notice": "Original illustrative diagnostic fixtures. Synthetic data, no live provider or human quality review.",
+  "segments": [
+    {
+      "id": "seg_lookup",
+      "source_id": "src_visual",
+      "text": "A key maps to a row. The illustrative table lists key A with row Alpha and key B with row Beta. These names illustrate lookup, not a measured dataset."
+    },
+    {
+      "id": "seg_chart",
+      "source_id": "src_visual",
+      "text": "The illustrative data are negative -12 units, zero 0 units and large 1500 units. These synthetic values test a zero-inclusive linear scale, not a benchmark or measurements."
+    },
+    {
+      "id": "seg_code",
+      "source_id": "src_visual",
+      "text": "The source snippet is displayed as text, never executed: SELECT name\nFROM customers;\nThe SELECT clause names the field and FROM names the table. This is an original display-only fixture."
+    }
+  ],
+  "drafts": [
+    {
+      "storyboard_version": 2,
+      "objective": "Explain a bounded source-supported visual",
+      "prerequisites": [],
+      "scenes": [
+        {
+          "id": "scene_0",
+          "kind": "diagram",
+          "summary": "Trace the key to a row",
+          "template": "process",
+          "nodes": [
+            {
+              "id": "node_0",
+              "label": "Search key",
+              "detail": "Selects the matching row",
+              "slot": 0,
+              "icon": "key",
+              "role": "start"
+            },
+            {
+              "id": "node_1",
+              "label": "Table row",
+              "detail": "Contains the matching data",
+              "slot": 1,
+              "icon": "table",
+              "role": "result"
+            }
+          ],
+          "connections": [
+            {
+              "id": "conn_0",
+              "source": "node_0",
+              "target": "node_1"
+            }
+          ],
+          "states": []
+        },
+        {
+          "id": "scene_1",
+          "kind": "table",
+          "summary": "Look up the same key in a table",
+          "payload": {
+            "columns": [
+              "Key",
+              "Row"
+            ],
+            "rows": [
+              {
+                "id": "row_0",
+                "cells": [
+                  "A",
+                  "Alpha"
+                ]
+              },
+              {
+                "id": "row_1",
+                "cells": [
+                  "B",
+                  "Beta"
+                ]
+              }
+            ],
+            "illustrative": true
+          }
+        },
+        {
+          "id": "scene_2",
+          "kind": "chart",
+          "summary": "Compare signed source values on one scale",
+          "payload": {
+            "chart_kind": "bar",
+            "unit": "units",
+            "axis_label": "Illustrative value",
+            "scale_policy": "zero_inclusive",
+            "illustrative": true,
+            "points": [
+              {
+                "id": "point_0",
+                "label": "Negative",
+                "value": -12,
+                "segment_id": "seg_chart"
+              },
+              {
+                "id": "point_1",
+                "label": "Zero",
+                "value": 0,
+                "segment_id": "seg_chart"
+              },
+              {
+                "id": "point_2",
+                "label": "Large",
+                "value": 1500,
+                "segment_id": "seg_chart"
+              }
+            ]
+          }
+        }
+      ],
+      "narration_units": [
+        {
+          "beat_id": "beat_0",
+          "scene_id": "scene_0",
+          "purpose": "Explain the supported visible mechanism",
+          "text": "A key identifies a matching row. Follow the connection from the search key to the row that contains the data.",
+          "segment_id": "seg_lookup",
+          "operations": [
+            {
+              "kind": "reveal",
+              "target": "node_0"
+            },
+            {
+              "kind": "reveal",
+              "target": "node_1"
+            },
+            {
+              "kind": "connect",
+              "target": "conn_0"
+            }
+          ]
+        },
+        {
+          "beat_id": "beat_1",
+          "scene_id": "scene_1",
+          "purpose": "Explain the supported visible mechanism",
+          "text": "The illustrative table uses the same lookup idea: key A maps to Alpha, while key B maps to Beta.",
+          "segment_id": "seg_lookup",
+          "operations": [
+            {
+              "kind": "reveal",
+              "target": "row_0"
+            },
+            {
+              "kind": "reveal",
+              "target": "row_1"
+            },
+            {
+              "kind": "focus",
+              "target": "row_0_c1"
+            }
+          ]
+        },
+        {
+          "beat_id": "beat_2",
+          "scene_id": "scene_2",
+          "purpose": "Explain the supported visible mechanism",
+          "text": "These synthetic values test the scale rather than performance. Negative and positive values extend from a shared zero baseline.",
+          "segment_id": "seg_chart",
+          "operations": [
+            {
+              "kind": "reveal",
+              "target": "point_0"
+            },
+            {
+              "kind": "reveal",
+              "target": "point_1"
+            },
+            {
+              "kind": "reveal",
+              "target": "point_2"
+            },
+            {
+              "kind": "focus",
+              "target": "point_0"
+            }
+          ]
+        }
+      ],
+      "question": null
+    },
+    {
+      "storyboard_version": 2,
+      "objective": "Explain a bounded source-supported visual",
+      "prerequisites": [],
+      "scenes": [
+        {
+          "id": "scene_0",
+          "kind": "code",
+          "summary": "Read a display-only source snippet",
+          "payload": {
+            "language": "sql",
+            "text": "SELECT name\nFROM customers;",
+            "segment_id": "seg_code"
+          }
+        }
+      ],
+      "narration_units": [
+        {
+          "beat_id": "beat_0",
+          "scene_id": "scene_0",
+          "purpose": "Explain the supported visible mechanism",
+          "text": "Read this source snippet as text only. The SELECT clause identifies the field that the source example requests from the table.",
+          "segment_id": "seg_code",
+          "operations": [
+            {
+              "kind": "reveal",
+              "target": "line_1"
+            },
+            {
+              "kind": "focus",
+              "target": "line_1"
+            }
+          ]
+        },
+        {
+          "beat_id": "beat_1",
+          "scene_id": "scene_0",
+          "purpose": "Explain the supported visible mechanism",
+          "text": "The FROM clause identifies the table used by the source example. This player displays the code without executing either line.",
+          "segment_id": "seg_code",
+          "operations": [
+            {
+              "kind": "reveal",
+              "target": "line_2"
+            },
+            {
+              "kind": "focus",
+              "target": "line_2"
+            }
+          ]
+        }
+      ],
+      "question": null
+    },
+    {
+      "storyboard_version": 2,
+      "objective": "Explain a bounded source-supported visual",
+      "prerequisites": [],
+      "scenes": [
+        {
+          "id": "scene_0",
+          "kind": "image",
+          "summary": "A managed illustration of key-to-row lookup",
+          "payload": {
+            "asset_id": "07a022ba600dc0501c4fd1560aa501368db72c5f4709eac5bced57d01281384d",
+            "width": 640,
+            "height": 400,
+            "alt": "Illustrative key card pointing to a table row",
+            "caption": "Key-to-row schematic, not a software screenshot.",
+            "annotations": [
+              {
+                "id": "annotation_0",
+                "x": 0.75,
+                "y": 0.6,
+                "label": "Matching row",
+                "segment_id": "seg_lookup"
+              }
+            ]
+          }
+        }
+      ],
+      "narration_units": [
+        {
+          "beat_id": "beat_0",
+          "scene_id": "scene_0",
+          "purpose": "Explain the supported visible mechanism",
+          "text": "This illustration shows a key pointing to a row. It is a schematic of lookup, not a product screenshot or a benchmark.",
+          "segment_id": "seg_lookup",
+          "operations": [
+            {
+              "kind": "reveal",
+              "target": "image"
+            }
+          ]
+        },
+        {
+          "beat_id": "beat_1",
+          "scene_id": "scene_0",
+          "purpose": "Explain the supported visible mechanism",
+          "text": "The annotation identifies the matching row. The image permission allows display, but factual teaching claims still need the separate supporting passage.",
+          "segment_id": "seg_lookup",
+          "operations": [
+            {
+              "kind": "reveal",
+              "target": "annotation_0"
+            },
+            {
+              "kind": "focus",
+              "target": "annotation_0"
+            }
+          ]
+        }
+      ],
+      "question": null
+    }
+  ],
+  "shorts": [
+    {
+      "concept_id": null,
+      "learning_outcome": null,
+      "teaching_role": null,
+      "curriculum_role": "core",
+      "example_id": null,
+      "source_review_status": "unchecked",
+      "source_review_reason": "",
+      "teaching_diagnostics": [],
+      "review_repair_reasons": [],
+      "storyboard_version": 2,
+      "timeline_compiler_version": "2-mixed-visuals",
+      "id": "visual_0",
+      "objective": "Explain a bounded source-supported visual",
+      "prerequisites": [],
+      "narration_units": [
+        {
+          "text": "A key identifies a matching row. Follow the connection from the search key to the row that contains the data.",
+          "evidence": {
+            "source_id": "src_visual",
+            "segment_ids": [
+              "seg_lookup"
+            ],
+            "start_ms": null,
+            "end_ms": null,
+            "quote": "A key maps to a row. The illustrative table lists key A with row Alpha and key B with row Beta. These names illustrate lookup, not a measured dataset."
+          },
+          "beat_id": "beat_0",
+          "scene_id": "scene_0",
+          "purpose": "Explain the supported visible mechanism",
+          "start_ms": 0,
+          "end_ms": 10000
+        },
+        {
+          "text": "The illustrative table uses the same lookup idea: key A maps to Alpha, while key B maps to Beta.",
+          "evidence": {
+            "source_id": "src_visual",
+            "segment_ids": [
+              "seg_lookup"
+            ],
+            "start_ms": null,
+            "end_ms": null,
+            "quote": "A key maps to a row. The illustrative table lists key A with row Alpha and key B with row Beta. These names illustrate lookup, not a measured dataset."
+          },
+          "beat_id": "beat_1",
+          "scene_id": "scene_1",
+          "purpose": "Explain the supported visible mechanism",
+          "start_ms": 10000,
+          "end_ms": 20000
+        },
+        {
+          "text": "These synthetic values test the scale rather than performance. Negative and positive values extend from a shared zero baseline.",
+          "evidence": {
+            "source_id": "src_visual",
+            "segment_ids": [
+              "seg_chart"
+            ],
+            "start_ms": null,
+            "end_ms": null,
+            "quote": "The illustrative data are negative -12 units, zero 0 units and large 1500 units. These synthetic values test a zero-inclusive linear scale, not a benchmark or measurements."
+          },
+          "beat_id": "beat_2",
+          "scene_id": "scene_2",
+          "purpose": "Explain the supported visible mechanism",
+          "start_ms": 20000,
+          "end_ms": 30000
+        }
+      ],
+      "evidence_references": [
+        {
+          "source_id": "src_visual",
+          "segment_ids": [
+            "seg_lookup"
+          ],
+          "start_ms": null,
+          "end_ms": null,
+          "quote": "A key maps to a row. The illustrative table lists key A with row Alpha and key B with row Beta. These names illustrate lookup, not a measured dataset."
+        },
+        {
+          "source_id": "src_visual",
+          "segment_ids": [
+            "seg_lookup"
+          ],
+          "start_ms": null,
+          "end_ms": null,
+          "quote": "A key maps to a row. The illustrative table lists key A with row Alpha and key B with row Beta. These names illustrate lookup, not a measured dataset."
+        },
+        {
+          "source_id": "src_visual",
+          "segment_ids": [
+            "seg_chart"
+          ],
+          "start_ms": null,
+          "end_ms": null,
+          "quote": "The illustrative data are negative -12 units, zero 0 units and large 1500 units. These synthetic values test a zero-inclusive linear scale, not a benchmark or measurements."
+        }
+      ],
+      "scenes": [
+        {
+          "id": "scene_0",
+          "kind": "diagram",
+          "summary": "Trace the key to a row",
+          "evidence_references": [
+            {
+              "source_id": "src_visual",
+              "segment_ids": [
+                "seg_lookup"
+              ],
+              "start_ms": null,
+              "end_ms": null,
+              "quote": "A key maps to a row. The illustrative table lists key A with row Alpha and key B with row Beta. These names illustrate lookup, not a measured dataset."
+            }
+          ],
+          "beat_ids": [
+            "beat_0"
+          ],
+          "states": [],
+          "template": "process",
+          "nodes": [
+            {
+              "id": "node_0",
+              "label": "Search key",
+              "detail": "Selects the matching row",
+              "slot": 0,
+              "shape": "box",
+              "icon": "key",
+              "role": "start",
+              "value": null
+            },
+            {
+              "id": "node_1",
+              "label": "Table row",
+              "detail": "Contains the matching data",
+              "slot": 1,
+              "shape": "box",
+              "icon": "table",
+              "role": "result",
+              "value": null
+            }
+          ],
+          "connections": [
+            {
+              "id": "conn_0",
+              "source": "node_0",
+              "target": "node_1"
+            }
+          ],
+          "actions": [
+            {
+              "kind": "appear",
+              "target": "node_0",
+              "at_ms": 0,
+              "to_slot": null,
+              "state_id": null,
+              "beat_id": "beat_0"
+            },
+            {
+              "kind": "appear",
+              "target": "node_1",
+              "at_ms": 0,
+              "to_slot": null,
+              "state_id": null,
+              "beat_id": "beat_0"
+            },
+            {
+              "kind": "draw",
+              "target": "conn_0",
+              "at_ms": 0,
+              "to_slot": null,
+              "state_id": null,
+              "beat_id": "beat_0"
+            }
+          ],
+          "start_ms": 0,
+          "end_ms": 10000
+        },
+        {
+          "evidence_references": [
+            {
+              "source_id": "src_visual",
+              "segment_ids": [
+                "seg_lookup"
+              ],
+              "start_ms": null,
+              "end_ms": null,
+              "quote": "A key maps to a row. The illustrative table lists key A with row Alpha and key B with row Beta. These names illustrate lookup, not a measured dataset."
+            }
+          ],
+          "beat_ids": [
+            "beat_1"
+          ],
+          "actions": [
+            {
+              "kind": "appear",
+              "target": "row_0",
+              "at_ms": 10000,
+              "to_slot": null,
+              "state_id": null,
+              "beat_id": "beat_1"
+            },
+            {
+              "kind": "appear",
+              "target": "row_1",
+              "at_ms": 10000,
+              "to_slot": null,
+              "state_id": null,
+              "beat_id": "beat_1"
+            },
+            {
+              "kind": "highlight",
+              "target": "row_0_c1",
+              "at_ms": 10000,
+              "to_slot": null,
+              "state_id": null,
+              "beat_id": "beat_1"
+            }
+          ],
+          "start_ms": 10000,
+          "end_ms": 20000,
+          "visual_version": 1,
+          "id": "scene_1",
+          "summary": "Look up the same key in a table",
+          "kind": "table",
+          "payload": {
+            "columns": [
+              "Key",
+              "Row"
+            ],
+            "rows": [
+              {
+                "id": "row_0",
+                "cells": [
+                  "A",
+                  "Alpha"
+                ]
+              },
+              {
+                "id": "row_1",
+                "cells": [
+                  "B",
+                  "Beta"
+                ]
+              }
+            ],
+            "illustrative": true
+          }
+        },
+        {
+          "evidence_references": [
+            {
+              "source_id": "src_visual",
+              "segment_ids": [
+                "seg_chart"
+              ],
+              "start_ms": null,
+              "end_ms": null,
+              "quote": "The illustrative data are negative -12 units, zero 0 units and large 1500 units. These synthetic values test a zero-inclusive linear scale, not a benchmark or measurements."
+            }
+          ],
+          "beat_ids": [
+            "beat_2"
+          ],
+          "actions": [
+            {
+              "kind": "appear",
+              "target": "point_0",
+              "at_ms": 20000,
+              "to_slot": null,
+              "state_id": null,
+              "beat_id": "beat_2"
+            },
+            {
+              "kind": "appear",
+              "target": "point_1",
+              "at_ms": 20000,
+              "to_slot": null,
+              "state_id": null,
+              "beat_id": "beat_2"
+            },
+            {
+              "kind": "appear",
+              "target": "point_2",
+              "at_ms": 20000,
+              "to_slot": null,
+              "state_id": null,
+              "beat_id": "beat_2"
+            },
+            {
+              "kind": "highlight",
+              "target": "point_0",
+              "at_ms": 20000,
+              "to_slot": null,
+              "state_id": null,
+              "beat_id": "beat_2"
+            }
+          ],
+          "start_ms": 20000,
+          "end_ms": 30000,
+          "visual_version": 1,
+          "id": "scene_2",
+          "summary": "Compare signed source values on one scale",
+          "kind": "chart",
+          "payload": {
+            "chart_kind": "bar",
+            "unit": "units",
+            "axis_label": "Illustrative value",
+            "scale_policy": "zero_inclusive",
+            "illustrative": true,
+            "points": [
+              {
+                "id": "point_0",
+                "label": "Negative",
+                "value": -12.0,
+                "segment_id": "seg_chart"
+              },
+              {
+                "id": "point_1",
+                "label": "Zero",
+                "value": 0.0,
+                "segment_id": "seg_chart"
+              },
+              {
+                "id": "point_2",
+                "label": "Large",
+                "value": 1500.0,
+                "segment_id": "seg_chart"
+              }
+            ]
+          }
+        }
+      ],
+      "question": null,
+      "audio_path": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.wav",
+      "measured_duration_ms": 30000,
+      "status": "ready",
+      "error": null,
+      "optional": false,
+      "question_required": false,
+      "cache_hit": false,
+      "provider_settings": {},
+      "timings": {}
+    },
+    {
+      "concept_id": null,
+      "learning_outcome": null,
+      "teaching_role": null,
+      "curriculum_role": "core",
+      "example_id": null,
+      "source_review_status": "unchecked",
+      "source_review_reason": "",
+      "teaching_diagnostics": [],
+      "review_repair_reasons": [],
+      "storyboard_version": 2,
+      "timeline_compiler_version": "2-mixed-visuals",
+      "id": "visual_1",
+      "objective": "Explain a bounded source-supported visual",
+      "prerequisites": [],
+      "narration_units": [
+        {
+          "text": "Read this source snippet as text only. The SELECT clause identifies the field that the source example requests from the table.",
+          "evidence": {
+            "source_id": "src_visual",
+            "segment_ids": [
+              "seg_code"
+            ],
+            "start_ms": null,
+            "end_ms": null,
+            "quote": "The source snippet is displayed as text, never executed: SELECT name\nFROM customers;\nThe SELECT clause names the field and FROM names the table. This is an original display-only fixture."
+          },
+          "beat_id": "beat_0",
+          "scene_id": "scene_0",
+          "purpose": "Explain the supported visible mechanism",
+          "start_ms": 0,
+          "end_ms": 15000
+        },
+        {
+          "text": "The FROM clause identifies the table used by the source example. This player displays the code without executing either line.",
+          "evidence": {
+            "source_id": "src_visual",
+            "segment_ids": [
+              "seg_code"
+            ],
+            "start_ms": null,
+            "end_ms": null,
+            "quote": "The source snippet is displayed as text, never executed: SELECT name\nFROM customers;\nThe SELECT clause names the field and FROM names the table. This is an original display-only fixture."
+          },
+          "beat_id": "beat_1",
+          "scene_id": "scene_0",
+          "purpose": "Explain the supported visible mechanism",
+          "start_ms": 15000,
+          "end_ms": 30000
+        }
+      ],
+      "evidence_references": [
+        {
+          "source_id": "src_visual",
+          "segment_ids": [
+            "seg_code"
+          ],
+          "start_ms": null,
+          "end_ms": null,
+          "quote": "The source snippet is displayed as text, never executed: SELECT name\nFROM customers;\nThe SELECT clause names the field and FROM names the table. This is an original display-only fixture."
+        },
+        {
+          "source_id": "src_visual",
+          "segment_ids": [
+            "seg_code"
+          ],
+          "start_ms": null,
+          "end_ms": null,
+          "quote": "The source snippet is displayed as text, never executed: SELECT name\nFROM customers;\nThe SELECT clause names the field and FROM names the table. This is an original display-only fixture."
+        }
+      ],
+      "scenes": [
+        {
+          "evidence_references": [
+            {
+              "source_id": "src_visual",
+              "segment_ids": [
+                "seg_code"
+              ],
+              "start_ms": null,
+              "end_ms": null,
+              "quote": "The source snippet is displayed as text, never executed: SELECT name\nFROM customers;\nThe SELECT clause names the field and FROM names the table. This is an original display-only fixture."
+            }
+          ],
+          "beat_ids": [
+            "beat_0",
+            "beat_1"
+          ],
+          "actions": [
+            {
+              "kind": "appear",
+              "target": "line_1",
+              "at_ms": 0,
+              "to_slot": null,
+              "state_id": null,
+              "beat_id": "beat_0"
+            },
+            {
+              "kind": "highlight",
+              "target": "line_1",
+              "at_ms": 0,
+              "to_slot": null,
+              "state_id": null,
+              "beat_id": "beat_0"
+            },
+            {
+              "kind": "appear",
+              "target": "line_2",
+              "at_ms": 15000,
+              "to_slot": null,
+              "state_id": null,
+              "beat_id": "beat_1"
+            },
+            {
+              "kind": "highlight",
+              "target": "line_2",
+              "at_ms": 15000,
+              "to_slot": null,
+              "state_id": null,
+              "beat_id": "beat_1"
+            }
+          ],
+          "start_ms": 0,
+          "end_ms": 30000,
+          "visual_version": 1,
+          "id": "scene_0",
+          "summary": "Read a display-only source snippet",
+          "kind": "code",
+          "payload": {
+            "language": "sql",
+            "text": "SELECT name\nFROM customers;",
+            "segment_id": "seg_code"
+          }
+        }
+      ],
+      "question": null,
+      "audio_path": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.wav",
+      "measured_duration_ms": 30000,
+      "status": "ready",
+      "error": null,
+      "optional": false,
+      "question_required": false,
+      "cache_hit": false,
+      "provider_settings": {},
+      "timings": {}
+    },
+    {
+      "concept_id": null,
+      "learning_outcome": null,
+      "teaching_role": null,
+      "curriculum_role": "core",
+      "example_id": null,
+      "source_review_status": "unchecked",
+      "source_review_reason": "",
+      "teaching_diagnostics": [],
+      "review_repair_reasons": [],
+      "storyboard_version": 2,
+      "timeline_compiler_version": "2-mixed-visuals",
+      "id": "visual_2",
+      "objective": "Explain a bounded source-supported visual",
+      "prerequisites": [],
+      "narration_units": [
+        {
+          "text": "This illustration shows a key pointing to a row. It is a schematic of lookup, not a product screenshot or a benchmark.",
+          "evidence": {
+            "source_id": "src_visual",
+            "segment_ids": [
+              "seg_lookup"
+            ],
+            "start_ms": null,
+            "end_ms": null,
+            "quote": "A key maps to a row. The illustrative table lists key A with row Alpha and key B with row Beta. These names illustrate lookup, not a measured dataset."
+          },
+          "beat_id": "beat_0",
+          "scene_id": "scene_0",
+          "purpose": "Explain the supported visible mechanism",
+          "start_ms": 0,
+          "end_ms": 15000
+        },
+        {
+          "text": "The annotation identifies the matching row. The image permission allows display, but factual teaching claims still need the separate supporting passage.",
+          "evidence": {
+            "source_id": "src_visual",
+            "segment_ids": [
+              "seg_lookup"
+            ],
+            "start_ms": null,
+            "end_ms": null,
+            "quote": "A key maps to a row. The illustrative table lists key A with row Alpha and key B with row Beta. These names illustrate lookup, not a measured dataset."
+          },
+          "beat_id": "beat_1",
+          "scene_id": "scene_0",
+          "purpose": "Explain the supported visible mechanism",
+          "start_ms": 15000,
+          "end_ms": 30000
+        }
+      ],
+      "evidence_references": [
+        {
+          "source_id": "src_visual",
+          "segment_ids": [
+            "seg_lookup"
+          ],
+          "start_ms": null,
+          "end_ms": null,
+          "quote": "A key maps to a row. The illustrative table lists key A with row Alpha and key B with row Beta. These names illustrate lookup, not a measured dataset."
+        },
+        {
+          "source_id": "src_visual",
+          "segment_ids": [
+            "seg_lookup"
+          ],
+          "start_ms": null,
+          "end_ms": null,
+          "quote": "A key maps to a row. The illustrative table lists key A with row Alpha and key B with row Beta. These names illustrate lookup, not a measured dataset."
+        }
+      ],
+      "scenes": [
+        {
+          "evidence_references": [
+            {
+              "source_id": "src_visual",
+              "segment_ids": [
+                "seg_lookup"
+              ],
+              "start_ms": null,
+              "end_ms": null,
+              "quote": "A key maps to a row. The illustrative table lists key A with row Alpha and key B with row Beta. These names illustrate lookup, not a measured dataset."
+            }
+          ],
+          "beat_ids": [
+            "beat_0",
+            "beat_1"
+          ],
+          "actions": [
+            {
+              "kind": "appear",
+              "target": "image",
+              "at_ms": 0,
+              "to_slot": null,
+              "state_id": null,
+              "beat_id": "beat_0"
+            },
+            {
+              "kind": "appear",
+              "target": "annotation_0",
+              "at_ms": 15000,
+              "to_slot": null,
+              "state_id": null,
+              "beat_id": "beat_1"
+            },
+            {
+              "kind": "highlight",
+              "target": "annotation_0",
+              "at_ms": 15000,
+              "to_slot": null,
+              "state_id": null,
+              "beat_id": "beat_1"
+            }
+          ],
+          "start_ms": 0,
+          "end_ms": 30000,
+          "visual_version": 1,
+          "id": "scene_0",
+          "summary": "A managed illustration of key-to-row lookup",
+          "kind": "image",
+          "payload": {
+            "asset_id": "07a022ba600dc0501c4fd1560aa501368db72c5f4709eac5bced57d01281384d",
+            "width": 640,
+            "height": 400,
+            "alt": "Illustrative key card pointing to a table row",
+            "caption": "Key-to-row schematic, not a software screenshot.",
+            "annotations": [
+              {
+                "id": "annotation_0",
+                "x": 0.75,
+                "y": 0.6,
+                "label": "Matching row",
+                "segment_id": "seg_lookup"
+              }
+            ]
+          },
+          "asset": {
+            "id": "07a022ba600dc0501c4fd1560aa501368db72c5f4709eac5bced57d01281384d",
+            "content_hash": "07a022ba600dc0501c4fd1560aa501368db72c5f4709eac5bced57d01281384d",
+            "kind": "image",
+            "mime_type": "image/png",
+            "byte_size": 7316,
+            "width": 640,
+            "height": 400,
+            "original_source": "bundled:fixtures/assets/lookup-illustration.png",
+            "creator": "Focus Play fixture authors",
+            "permission_basis": "Original project illustration dedicated to CC0 1.0; inclusion and redistribution permitted.",
+            "attribution": "Focus Play lookup illustration \u00b7 CC0 1.0",
+            "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+            "acquired_at": 0,
+            "managed_filename": "07a022ba600dc0501c4fd1560aa501368db72c5f4709eac5bced57d01281384d.png",
+            "source_context": "Illustrative key-to-row schematic, not a product screenshot or measured dataset.",
+            "illustrative": true,
+            "status": "ready",
+            "failure_reason": ""
+          }
+        }
+      ],
+      "question": null,
+      "audio_path": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.wav",
+      "measured_duration_ms": 30000,
+      "status": "ready",
+      "error": null,
+      "optional": false,
+      "question_required": false,
+      "cache_hit": false,
+      "provider_settings": {},
+      "timings": {}
+    }
+  ]
+}

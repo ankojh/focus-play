@@ -9,7 +9,7 @@
   "teaching_diagnostics": [],
   "review_repair_reasons": [],
   "storyboard_version": 2,
-  "timeline_compiler_version": "1",
+  "timeline_compiler_version": "2-mixed-visuals",
   "id": "storyboard_fixture",
   "objective": "Compare scanning with an index lookup",
   "prerequisites": [],

@@ -3,16 +3,19 @@
 Scenes/narration are contiguous half-open intervals; the last frame holds at duration.
 No lexical targeting, model timestamps, or independent animation clock is used.
 """
-from .contracts import Scene, SceneAction, NarrationUnit
+from .contracts import Scene, SceneAction, NarrationUnit, TableScene, CodeScene, ChartScene, ImageScene
+from .visuals import validate_visual_scene, validate_visual_transitions
 
 STORYBOARD_VERSION = 2
-COMPILER_VERSION = "1"
+COMPILER_VERSION = "2-mixed-visuals"
 KINDS = {"reveal": "appear", "hide": "disappear", "focus": "highlight",
          "connect": "draw", "move": "move", "change_state": "change_state"}
 FIXED_LAYOUTS = {"cycle", "dos_donts", "key_fact"}
 
 
 def validate_scene(scene):
+    if scene.kind != "diagram":
+        return validate_visual_scene(scene)
     if scene.start_ms >= scene.end_ms:
         raise ValueError("Scene end must follow its start.")
     nodes = {n.id: n for n in scene.nodes}
@@ -79,11 +82,16 @@ def validate_storyboard(draft):
         actions = [SceneAction(kind=KINDS[op.kind], target=op.target, at_ms=i,
                     to_slot=op.to_slot, state_id=op.state_id, beat_id=beat.beat_id)
                    for i, beat in enumerate(selected) for op in beat.operations]
-        Scene(**scene.model_dump(), actions=actions, start_ms=0, end_ms=len(selected))
+        if scene.kind == "diagram":
+            Scene(**scene.model_dump(), actions=actions, start_ms=0, end_ms=len(selected))
+        else:
+            validate_visual_scene(scene, actions)
         validate_transitions(scene, actions)
 
 
 def validate_transitions(scene, actions):
+    if scene.kind != "diagram":
+        return validate_visual_transitions(scene, actions)
     visible, drawn = set(), set()
     edge_map = {e.id: e for e in scene.connections}
     for action in actions:
@@ -155,15 +163,22 @@ def validate_timeline(scenes, units, duration):
         raise ValueError("Scenes must cover the entire ordered narration.")
 
 
-def compile_storyboard(draft, duration):
-    # Revalidate even when a caller has mutated a Pydantic object in-place.
+def compile_storyboard(draft, duration, assets=None):
+    # Reparse payload fields too: assignment after validation must not bypass bounds.
+    draft = type(draft).model_validate(draft.model_dump())
     validate_storyboard(draft)
     validate_boundaries(draft.narration_units, duration)
     scenes = []
     for authored in draft.scenes:
         beats = [b for b in draft.narration_units if b.scene_id == authored.id]
         refs = list({(b.evidence.source_id, tuple(b.evidence.segment_ids)): b.evidence for b in beats}.values())
-        scenes.append(Scene(**authored.model_dump(), start_ms=beats[0].start_ms, end_ms=beats[-1].end_ms,
+        renderer = {"diagram": Scene, "table": TableScene, "code": CodeScene, "chart": ChartScene, "image": ImageScene}[authored.kind]
+        extra = {}
+        if authored.kind == "image":
+            if assets is None:
+                raise ValueError("Images require a managed asset service before compilation.")
+            extra["asset"] = assets.attach(authored.payload.asset_id)
+        scenes.append(renderer(**authored.model_dump(), **extra, start_ms=beats[0].start_ms, end_ms=beats[-1].end_ms,
             beat_ids=[b.beat_id for b in beats], evidence_references=refs,
             actions=[SceneAction(kind=KINDS[op.kind], target=op.target, at_ms=beat.start_ms,
                        to_slot=op.to_slot, state_id=op.state_id, beat_id=beat.beat_id)

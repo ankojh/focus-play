@@ -2,7 +2,7 @@
 
 ## Delivered scope
 
-New generation uses `ModelStoryboard` / `StoryboardDraft`, not the legacy flat `ModelShort`. Each short has one objective, 2–5 ordered cited beats (3–5 recommended), and 1–3 diagram scenes. A beat has a stable ID, learning purpose, scene binding, and 1–8 explicit operations. A simpler two-beat explanation remains allowed. Existing word bounds and the measured 40-second short limit remain in force. This does **not** implement whole-session duration planning (#5).
+New generation uses `ModelStoryboard` / `StoryboardDraft`, not the legacy flat `ModelShort`. Each short has one objective, 2–5 ordered cited beats (3–5 recommended), and 1–3 controlled visual scenes (mixed formats are documented in [mixed visuals](mixed-visuals.md)). A beat has a stable ID, learning purpose, scene binding, and 1–8 explicit operations. A simpler two-beat explanation remains allowed. Existing word bounds and the measured 40-second short limit remain in force. This does **not** implement whole-session duration planning (#5).
 
 Supported authoring operations and compiled equivalents:
 
@@ -19,7 +19,7 @@ State payloads contain bounded plain labels, details, and roles. No model-genera
 
 Changing `scene_id` replaces the scene. Beats must bind to scenes in their declared contiguous order; unused scenes and returning to a previous scene are rejected. Every node must have an explicit reveal and every connection an explicit connect. New semantics never pass through lexical `refine_cues` targeting.
 
-The scene envelope adds identity, `kind: diagram`, an accessible summary, beat IDs, states, and evidence references. Diagram payload fields remain compatible with existing saved scenes. Only the diagram kind is implemented here; a renderer payload union, tables/code/assets, and provider/licensing choices remain workstream #3. This is a deliberate bounded implementation, not an arbitrary animation editor.
+The scene envelope adds identity, `kind: diagram`, an accessible summary, beat IDs, states, and evidence references. Diagram payload fields remain compatible with existing saved scenes. Workstream #3 now adds the bounded renderer payload union for tables, display-only source code, proper bar charts and managed local images/screenshots; see [mixed visuals](mixed-visuals.md) for contracts and compatibility. Live asset acquisition/provider/licensing policy and footage remain deferred. This is a deliberate bounded implementation, not an arbitrary animation editor.
 
 ## Generation and evidence
 

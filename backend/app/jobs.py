@@ -7,6 +7,8 @@ import time
 import uuid
 from .contracts import Job, Lesson, LessonPlan, Short, StoryboardDraft, ErrorInfo, ModelStoryboard, SavedLearningRequest, CandidateRanking
 from .storyboard import STORYBOARD_VERSION, COMPILER_VERSION, compile_storyboard
+from .assets import Assets
+from .visuals import VISUAL_VERSION
 from .errors import AppError, Cancelled
 from .providers import check_cancel
 from .ranking import KEEP, pick, ranking_task, validator
@@ -26,7 +28,7 @@ TEMPLATES = {
     "key_fact": "node_0 is the single most important rule or number; 1 to 3 supporting nodes explain it.",
     "timeline": "events in time order; roles step.",
     "example": "a concrete worked example from the passages, from situation to outcome.",
-    "chart": "bars whose values are numbers stated in the passages; never invent values.",
+    "chart": "quantitative comparison using kind chart with source values, units and a zero-inclusive scale; never legacy diagram mini-bars or invented values.",
 }
 TEMPLATE_GUIDE = " ".join(f"{name}: {text}" for name, text in TEMPLATES.items())
 
@@ -41,6 +43,8 @@ class Jobs:
     def __init__(self, store, model, speech, settings, youtube=None):
         self.store, self.model, self.speech, self.settings = store, model, speech, settings
         self.youtube = youtube or YouTubeSources(store,settings)
+        self.assets = Assets(store)
+        self.assets.install_bundled()
         self.queue = asyncio.PriorityQueue(maxsize=settings.queue_size)
         self.cancel_flags = {}
         self.active = set()
@@ -412,15 +416,21 @@ class Jobs:
                     "outcome": short.learning_outcome or short.objective, "role": short.teaching_role,
                     "plan": objective.model_dump() if objective and not short.optional else None,
                     "example": example.model_dump() if example else None, "history": history}
-        short_key = cache_key({**key_base, "teaching": teaching, "template": template, "question": short.question_required,
+        asset_candidates = self.assets.candidates()
+        short_key = cache_key({**key_base, "visual_version": VISUAL_VERSION, "asset_candidates": [a["id"] for a in asset_candidates], "teaching": teaching, "template": template, "question": short.question_required,
                                "earlier_questions": earlier_questions, "segments": [s.id for s in segments], "stage": "draft"})
         cached = self.store.cache_get(short_key)
         await self.stage(lesson, "preparing the first short" if index == 0 else f"preparing short {index + 1}", short, "generating")
         model_start = time.monotonic()
         def valid(content):
             draft = attach_evidence(content, segments) if isinstance(content, ModelStoryboard) else content
-            if draft.scenes[0].template != template:
-                raise ValueError(f"Use the {template} template for the first scene.")
+            for visual in draft.scenes:
+                if visual.kind == "image":
+                    if visual.payload.asset_id not in {a["id"] for a in asset_candidates}:
+                        raise ValueError("Select an existing allowed managed asset ID.")
+                    asset = self.assets.attach(visual.payload.asset_id)
+                    if (asset.width, asset.height) != (visual.payload.width, visual.payload.height):
+                        raise ValueError("Use the managed asset's actual dimensions.")
             validate_draft(draft, segments, short.question_required, earlier_narration,
                            allow_recap=short.teaching_role == "recap", earlier_questions=earlier_questions, example=example)
         task = {"task": "Teach one learning outcome with a supported visual demonstration. Return a complete ModelStoryboard version 2. "
@@ -436,10 +446,16 @@ class Jobs:
                     "A distinct application of a known concept is allowed. Avoid generic hooks, filler and false guarantees. "
                     "A required checkpoint tests the outcome actually taught: prediction/application over trivia, one unambiguous correct_answer, "
                     "1 to 3 plausible distractors representing misconceptions and supported reasoning in explanation. Do not repeat earlier questions. Question must be null unless required. "
-                    "Use 2 to 4 nodes per scene with IDs node_0 through node_3 in order and unique slots. "
-                    f"First scene template {template}: {TEMPLATES[template]} Later scenes can use any allowed template. Do not author timestamps or renderer code.",
+                    "Choose the format for the teaching intent, not random variety: diagram for relationships/processes, table for lookup, code for exact source snippets, chart for quantitative comparison, image only when an allowed candidate is relevant. "
+                    "Diagram scenes use 2 to 4 nodes, node_0 through node_3 and unique slots. "
+                    "Table operations target row_0 through row_7 or row_0_c0 cells; code targets line_1 through line_30; charts target point_0 through point_7; images target image or annotation_0 through annotation_5. "
+                    "Non-diagram renderers allow only reveal/hide/focus. Reveal every row, code line, chart point, image and annotation before focus/hide; cells inherit row visibility. "
+                    "Code is display-only and must be copied exactly from its cited segment, never invented or executed. Chart values and units must match each point's cited passage. "
+                    "Images select only candidate asset_id and actual dimensions. Asset rights do not prove a claim; captions/annotations need source support. Use a simpler supported format if no suitable asset exists. "
+                    f"Suggested visual intent {template}: {TEMPLATES[template]} The diagram chart template is legacy-only. Do not author timestamps or renderer code.",
                 "objective": short.objective, "template": template, "question_required": short.question_required,
                 "learner": lesson.request.prior_knowledge, "teaching": teaching, "earlier_questions": earlier_questions,
+                "asset_candidates": asset_candidates, "visual_version": VISUAL_VERSION,
                 "segments": [s.model_dump() for s in segments]}
         if cached:
             short.source_review_status = "model_supported"
@@ -477,7 +493,8 @@ class Jobs:
         short.timings["speech_seconds"] = time.monotonic() - speech_start
         compile_start = time.monotonic()
         try:
-            scenes, units = compile_storyboard(draft, duration)
+            scenes, units = compile_storyboard(draft, duration, self.assets)
+            self.assets.reference(scenes, lesson.id, short.id)
         except ValueError as exc:
             raise AppError("STORYBOARD_TIMELINE_INVALID", "The measured storyboard could not be compiled. Retry to regenerate this short; ready shorts are preserved.", 422) from exc
         check_cancel(cancel)

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Play, Pause, ChevronRight, Volume2, VolumeX, ArrowUp, ArrowDown, BookOpen, ThumbsUp, ThumbsDown } from 'lucide-react';
 import type { Short } from './api';
 import { duration, restore } from './api';
-import { Diagram } from './Diagram';
+import { Visual } from './Visual';
 import { atTime, timelineError } from './playback';
 export function Player({short, lessonId, previous, next, onPrevious, onNext, autoplay, onAudioError, onSources, sourcesVisible}: {short: Short; lessonId: string; previous: boolean; next: boolean; onPrevious: ()=>void; onNext: ()=>void; autoplay: boolean; onAudioError:()=>void; onSources:()=>void; sourcesVisible:boolean}) {
   const audio = useRef<HTMLAudioElement>(null);
@@ -19,6 +19,8 @@ export function Player({short, lessonId, previous, next, onPrevious, onNext, aut
     let total=0,locked=false,direction=0,timer:ReturnType<typeof setTimeout>|undefined;
     const wheel=(event:WheelEvent)=>{
       if(event.ctrlKey || Math.abs(event.deltaX)>Math.abs(event.deltaY) || (event.target as HTMLElement).closest('input,select,textarea'))return;
+      const reader=(event.target as HTMLElement).closest<HTMLElement>('.data-visual');
+      if(reader && reader.scrollHeight>reader.clientHeight+1)return;
       const delta=event.deltaY*(event.deltaMode===1?16:event.deltaMode===2?view.clientHeight:1);
       const sign=Math.sign(delta);if(!sign)return;
       const nav=navigation.current;
@@ -50,11 +52,11 @@ export function Player({short, lessonId, previous, next, onPrevious, onNext, aut
   const scene=metadataError?undefined:atTime(short.scenes,clock,short.measured_duration_ms);
   const question=short.question;
   return <div className="player-area">
-    <div className="shorts-view" ref={shortsView} onTouchStart={e=>{const t=e.touches[0];touchStart.current=e.touches.length===1?{x:t.clientX,y:t.clientY}:null;}} onTouchCancel={()=>{touchStart.current=null;}} onTouchEnd={e=>{const start=touchStart.current;touchStart.current=null;const t=e.changedTouches[0];if(!start || !t)return;const dy=start.y-t.clientY,dx=start.x-t.clientX;if(Math.abs(dy)<50 || Math.abs(dy)<=Math.abs(dx))return;if(dy>0 && next)onNext();else if(dy<0 && previous)onPrevious();}}>
+    <div className="shorts-view" ref={shortsView} onTouchStart={e=>{const t=e.touches[0],reader=(e.target as HTMLElement).closest<HTMLElement>('.data-visual');touchStart.current=e.touches.length===1 && !(reader && reader.scrollHeight>reader.clientHeight+1)?{x:t.clientX,y:t.clientY}:null;}} onTouchCancel={()=>{touchStart.current=null;}} onTouchEnd={e=>{const start=touchStart.current;touchStart.current=null;const t=e.changedTouches[0];if(!start || !t)return;const dy=start.y-t.clientY,dx=start.x-t.clientX;if(Math.abs(dy)<50 || Math.abs(dy)<=Math.abs(dx))return;if(dy>0 && next)onNext();else if(dy<0 && previous)onPrevious();}}>
     <div className="player" tabIndex={0} aria-label="Lesson player. Space to play or pause. Up and down for shorts. Left and right to seek." onKeyDown={e=>{if(e.target!==e.currentTarget)return;if(e.code==='Space'){e.preventDefault();toggle();}if(e.code==='ArrowDown' && next){e.preventDefault();onNext();}if(e.code==='ArrowUp' && previous){e.preventDefault();onPrevious();}if(e.code==='ArrowRight'){e.preventDefault();seek(Math.min(time+5000,short.measured_duration_ms));}if(e.code==='ArrowLeft'){e.preventDefault();seek(Math.max(0,time-5000));}}}>
       <div className="player-top"><button aria-label={playing?'Pause':'Play'} disabled={!!metadataError} className="play-button" onClick={toggle}>{playing?<Pause size={22} fill="currentColor"/>:<Play size={22} fill="currentColor"/>}</button><span className="player-type">LEARNING SHORT</span><button aria-label={muted?'Unmute narration':'Mute narration'} className="volume-button" onClick={()=>{const a=audio.current;if(a){a.muted=!a.muted;setMuted(a.muted);}}}>{muted?<VolumeX size={22}/>:<Volume2 size={22}/>}</button></div>
       <div className="short-title"><span className="player-kicker">ONE IDEA AT A TIME</span><h2>{short.objective}</h2></div>
-      {scene ? <Diagram scene={scene} time={clock}/> : <p className="error" role="alert">{metadataError??'No scene covers this audio position. Retry lesson preparation.'}</p>}
+      {scene ? <Visual scene={scene} time={clock}/> : <p className="error" role="alert">{metadataError??'No scene covers this audio position. Retry lesson preparation.'}</p>}
       <div className="captions" data-testid="captions" aria-live="off">{unit?.text}</div>
       <div className="player-bottom"><span className="channel-avatar"><Play size={16} fill="currentColor"/></span><div><strong>@focusplay</strong><span>Local voice · Your sources</span></div><span className="channel-badge">Learning</span></div>
       <div className="controls"><div className="control-row"><span className="time-readout">{duration(time)} <span>/ {duration(short.measured_duration_ms)}</span></span><span>Local narration</span></div><input aria-label="Seek within short" type="range" min="0" max={short.measured_duration_ms} value={Math.min(time,short.measured_duration_ms)} step="100" style={{'--played':`${Math.min(100,time/short.measured_duration_ms*100)}%`} as React.CSSProperties} onChange={e=>seek(Number(e.target.value))}/></div>

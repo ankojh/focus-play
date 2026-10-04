@@ -1,0 +1,13 @@
+[
+  {
+    "filename": "lookup-illustration.png",
+    "kind": "image",
+    "original_source": "bundled:fixtures/assets/lookup-illustration.png",
+    "creator": "Focus Play fixture authors",
+    "permission_basis": "Original project illustration dedicated to CC0 1.0; inclusion and redistribution permitted.",
+    "attribution": "Focus Play lookup illustration · CC0 1.0",
+    "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "source_context": "Illustrative key-to-row schematic, not a product screenshot or measured dataset.",
+    "illustrative": true
+  }
+]

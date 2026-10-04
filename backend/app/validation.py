@@ -89,6 +89,12 @@ def validate_draft(draft: ShortDraft, segments, require_question: bool, earlier=
         from .storyboard import validate_storyboard
         validate_storyboard(draft)
     for visual in visuals:
+        if getattr(visual, "kind", "diagram") != "diagram":
+            from .visuals import validate_visual_evidence
+            validate_visual_evidence(visual, segments, draft.narration_units)
+            continue
+        if isinstance(draft, StoryboardDraft) and visual.template == "chart":
+            raise ValueError("New quantitative scenes must use kind chart with units and a zero-inclusive scale, not legacy diagram bars.")
         validate_diagram(visual)
         for state in getattr(visual, "states", []):
             if len(state.detail.split()) < 2:
@@ -102,8 +108,9 @@ def validate_draft(draft: ShortDraft, segments, require_question: bool, earlier=
         if any(similar(draft.question.prompt, prompt, .8) for prompt in earlier_questions):
             raise ValueError("A practice checkpoint must not repeat an earlier question.")
     if example:
+        from .visuals import visual_text
         text = " ".join([u.text for u in draft.narration_units] +
-                        [n.label + " " + n.detail for visual in visuals for n in visual.nodes]).casefold()
+                        [visual_text(v) if hasattr(v, "kind") else " ".join(n.label + " " + n.detail for n in v.nodes) for v in visuals]).casefold()
         if not any(entity.casefold() in text for entity in example.entities):
             raise ValueError("A recurring example must preserve its named entities, not substitute a new example.")
         cited = {sid for unit in draft.narration_units for sid in unit.evidence.segment_ids}
@@ -112,6 +119,8 @@ def validate_draft(draft: ShortDraft, segments, require_question: bool, earlier=
     # Charts use supplied numeric values only; reject invented measurements.
     values={float(value) for s in segments for value in re.findall(r"(?<![\w.])\d+(?:\.\d+)?(?![\w.])",s.text)}
     for visual in visuals:
+        if getattr(visual, "kind", "diagram") != "diagram":
+            continue
         if visual.template == "chart" and any(node.value is None for node in visual.nodes):
             raise ValueError("A chart requires source numeric values for every bar.")
         for node in visual.nodes:
@@ -129,6 +138,9 @@ def verify_support(model, draft, segments, cancel, teaching=None):
     result = model.generate(SupportCheck, {"task": "Review this short against the supplied passages. The narration is a teacher's paraphrase; rewording and simplifying are fine. "
         "Review each beat's explicit operations, scene summary, labels, state changes, connections and narration together against that beat's cited passages. "
         "A label/state introduced or revealed by a beat must be supported by that beat's evidence, not an unrelated retrieved passage. "
+        "Review table cells, displayed code lines, chart point labels/data/units and zero-inclusive scale, image captions and annotations, not just diagrams. "
+        "Asset provenance is permission to display, not evidence for a claim. Images marked illustrative do not prove facts or represent a real product screenshot. "
+        "Display-only code must be an exact source snippet. Review chart label/value associations and uncertainty against each point's passage. "
         "Use source-only examples: reject new entities, invented values or synthetic substitutions, even when labelled illustrative. "
         "If a persisted example record is supplied, preserve its entities and facts; no unexplained substitution is allowed. "
         "Reject when a visual change targets an unrelated concept (including negative mentions), a narration unit, diagram detail, state label, or question answer states something the passages contradict or do not teach at all, "

@@ -362,6 +362,82 @@
         }
       }
     },
+    "/api/assets/{asset_id}/metadata": {
+      "get": {
+        "summary": "Asset Metadata",
+        "operationId": "asset_metadata_api_assets__asset_id__metadata_get",
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Asset Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetRecord"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/assets/{asset_id}": {
+      "get": {
+        "summary": "Asset Content",
+        "operationId": "asset_content_api_assets__asset_id__get",
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Asset Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/audio/{name}": {
       "get": {
         "summary": "Audio",
@@ -402,6 +478,188 @@
   },
   "components": {
     "schemas": {
+      "Annotation": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,19}$",
+            "title": "Id"
+          },
+          "x": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "X"
+          },
+          "y": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Y"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Label"
+          },
+          "segment_id": {
+            "type": "string",
+            "title": "Segment Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "x",
+          "y",
+          "label",
+          "segment_id"
+        ],
+        "title": "Annotation"
+      },
+      "AssetRecord": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Id"
+          },
+          "content_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Content Hash"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "image",
+              "screenshot"
+            ],
+            "title": "Kind"
+          },
+          "mime_type": {
+            "type": "string",
+            "enum": [
+              "image/png",
+              "image/jpeg"
+            ],
+            "title": "Mime Type"
+          },
+          "byte_size": {
+            "type": "integer",
+            "maximum": 5000000.0,
+            "minimum": 1.0,
+            "title": "Byte Size"
+          },
+          "width": {
+            "type": "integer",
+            "maximum": 4096.0,
+            "minimum": 1.0,
+            "title": "Width"
+          },
+          "height": {
+            "type": "integer",
+            "maximum": 4096.0,
+            "minimum": 1.0,
+            "title": "Height"
+          },
+          "original_source": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Original Source"
+          },
+          "creator": {
+            "type": "string",
+            "maxLength": 150,
+            "minLength": 1,
+            "title": "Creator"
+          },
+          "permission_basis": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 5,
+            "title": "Permission Basis"
+          },
+          "attribution": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 5,
+            "title": "Attribution"
+          },
+          "license_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License Url"
+          },
+          "acquired_at": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Acquired At"
+          },
+          "managed_filename": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}\\.(png|jpg)$",
+            "title": "Managed Filename"
+          },
+          "source_context": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 5,
+            "title": "Source Context"
+          },
+          "illustrative": {
+            "type": "boolean",
+            "title": "Illustrative"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "validated",
+              "ready",
+              "missing",
+              "failed"
+            ],
+            "title": "Status",
+            "default": "validated"
+          },
+          "failure_reason": {
+            "type": "string",
+            "maxLength": 300,
+            "title": "Failure Reason",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "content_hash",
+          "kind",
+          "mime_type",
+          "byte_size",
+          "width",
+          "height",
+          "original_source",
+          "creator",
+          "permission_basis",
+          "attribution",
+          "acquired_at",
+          "managed_filename",
+          "source_context",
+          "illustrative"
+        ],
+        "title": "AssetRecord"
+      },
       "CandidateScore": {
         "properties": {
           "video_id": {
@@ -457,6 +715,281 @@
           "reason"
         ],
         "title": "CandidateScore"
+      },
+      "ChartPayload": {
+        "properties": {
+          "chart_kind": {
+            "type": "string",
+            "const": "bar",
+            "title": "Chart Kind",
+            "default": "bar"
+          },
+          "unit": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Unit"
+          },
+          "axis_label": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Axis Label"
+          },
+          "scale_policy": {
+            "type": "string",
+            "const": "zero_inclusive",
+            "title": "Scale Policy",
+            "default": "zero_inclusive"
+          },
+          "illustrative": {
+            "type": "boolean",
+            "title": "Illustrative",
+            "default": false
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/ChartPoint"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Points"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "unit",
+          "axis_label",
+          "points"
+        ],
+        "title": "ChartPayload"
+      },
+      "ChartPoint": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,19}$",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Label"
+          },
+          "value": {
+            "type": "number",
+            "maximum": 1000000000000.0,
+            "minimum": -1000000000000.0,
+            "title": "Value"
+          },
+          "segment_id": {
+            "type": "string",
+            "title": "Segment Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "value",
+          "segment_id"
+        ],
+        "title": "ChartPoint"
+      },
+      "ChartScene": {
+        "properties": {
+          "evidence_references": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Evidence References",
+            "default": []
+          },
+          "beat_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Beat Ids",
+            "default": []
+          },
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/SceneAction"
+            },
+            "type": "array",
+            "maxItems": 40,
+            "title": "Actions"
+          },
+          "start_ms": {
+            "type": "integer",
+            "maximum": 39999.0,
+            "minimum": 0.0,
+            "title": "Start Ms",
+            "default": 0
+          },
+          "end_ms": {
+            "type": "integer",
+            "maximum": 40000.0,
+            "minimum": 1.0,
+            "title": "End Ms"
+          },
+          "visual_version": {
+            "type": "integer",
+            "const": 1,
+            "title": "Visual Version",
+            "default": 1
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,19}$",
+            "title": "Id"
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 240,
+            "minLength": 5,
+            "title": "Summary"
+          },
+          "kind": {
+            "type": "string",
+            "const": "chart",
+            "title": "Kind"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ChartPayload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actions",
+          "end_ms",
+          "id",
+          "summary",
+          "kind",
+          "payload"
+        ],
+        "title": "ChartScene"
+      },
+      "CodePayload": {
+        "properties": {
+          "language": {
+            "type": "string",
+            "enum": [
+              "text",
+              "python",
+              "sql",
+              "javascript",
+              "shell"
+            ],
+            "title": "Language"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 6000,
+            "minLength": 1,
+            "title": "Text"
+          },
+          "segment_id": {
+            "type": "string",
+            "title": "Segment Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "language",
+          "text",
+          "segment_id"
+        ],
+        "title": "CodePayload"
+      },
+      "CodeScene": {
+        "properties": {
+          "evidence_references": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Evidence References",
+            "default": []
+          },
+          "beat_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Beat Ids",
+            "default": []
+          },
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/SceneAction"
+            },
+            "type": "array",
+            "maxItems": 40,
+            "title": "Actions"
+          },
+          "start_ms": {
+            "type": "integer",
+            "maximum": 39999.0,
+            "minimum": 0.0,
+            "title": "Start Ms",
+            "default": 0
+          },
+          "end_ms": {
+            "type": "integer",
+            "maximum": 40000.0,
+            "minimum": 1.0,
+            "title": "End Ms"
+          },
+          "visual_version": {
+            "type": "integer",
+            "const": 1,
+            "title": "Visual Version",
+            "default": 1
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,19}$",
+            "title": "Id"
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 240,
+            "minLength": 5,
+            "title": "Summary"
+          },
+          "kind": {
+            "type": "string",
+            "const": "code",
+            "title": "Kind"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/CodePayload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actions",
+          "end_ms",
+          "id",
+          "summary",
+          "kind",
+          "payload"
+        ],
+        "title": "CodeScene"
       },
       "Connection": {
         "properties": {
@@ -850,6 +1383,141 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "ImagePayload": {
+        "properties": {
+          "asset_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Asset Id"
+          },
+          "width": {
+            "type": "integer",
+            "maximum": 4096.0,
+            "minimum": 1.0,
+            "title": "Width"
+          },
+          "height": {
+            "type": "integer",
+            "maximum": 4096.0,
+            "minimum": 1.0,
+            "title": "Height"
+          },
+          "alt": {
+            "type": "string",
+            "maxLength": 240,
+            "minLength": 5,
+            "title": "Alt"
+          },
+          "caption": {
+            "type": "string",
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Caption"
+          },
+          "annotations": {
+            "items": {
+              "$ref": "#/components/schemas/Annotation"
+            },
+            "type": "array",
+            "maxItems": 6,
+            "title": "Annotations",
+            "default": []
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "asset_id",
+          "width",
+          "height",
+          "alt",
+          "caption"
+        ],
+        "title": "ImagePayload"
+      },
+      "ImageScene": {
+        "properties": {
+          "evidence_references": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Evidence References",
+            "default": []
+          },
+          "beat_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Beat Ids",
+            "default": []
+          },
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/SceneAction"
+            },
+            "type": "array",
+            "maxItems": 40,
+            "title": "Actions"
+          },
+          "start_ms": {
+            "type": "integer",
+            "maximum": 39999.0,
+            "minimum": 0.0,
+            "title": "Start Ms",
+            "default": 0
+          },
+          "end_ms": {
+            "type": "integer",
+            "maximum": 40000.0,
+            "minimum": 1.0,
+            "title": "End Ms"
+          },
+          "visual_version": {
+            "type": "integer",
+            "const": 1,
+            "title": "Visual Version",
+            "default": 1
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,19}$",
+            "title": "Id"
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 240,
+            "minLength": 5,
+            "title": "Summary"
+          },
+          "kind": {
+            "type": "string",
+            "const": "image",
+            "title": "Kind"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ImagePayload"
+          },
+          "asset": {
+            "$ref": "#/components/schemas/AssetRecord"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actions",
+          "end_ms",
+          "id",
+          "summary",
+          "kind",
+          "payload",
+          "asset"
+        ],
+        "title": "ImageScene"
       },
       "Job": {
         "properties": {
@@ -1904,7 +2572,33 @@
           },
           "scenes": {
             "items": {
-              "$ref": "#/components/schemas/Scene"
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/Scene"
+                },
+                {
+                  "$ref": "#/components/schemas/TableScene"
+                },
+                {
+                  "$ref": "#/components/schemas/CodeScene"
+                },
+                {
+                  "$ref": "#/components/schemas/ChartScene"
+                },
+                {
+                  "$ref": "#/components/schemas/ImageScene"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "kind",
+                "mapping": {
+                  "chart": "#/components/schemas/ChartScene",
+                  "code": "#/components/schemas/CodeScene",
+                  "diagram": "#/components/schemas/Scene",
+                  "image": "#/components/schemas/ImageScene",
+                  "table": "#/components/schemas/TableScene"
+                }
+              }
             },
             "type": "array",
             "title": "Scenes",
@@ -2118,6 +2812,148 @@
           "sources"
         ],
         "title": "SourceList"
+      },
+      "TablePayload": {
+        "properties": {
+          "columns": {
+            "items": {
+              "type": "string",
+              "maxLength": 120,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 4,
+            "minItems": 1,
+            "title": "Columns"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/TableRow"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Rows"
+          },
+          "illustrative": {
+            "type": "boolean",
+            "title": "Illustrative",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "columns",
+          "rows"
+        ],
+        "title": "TablePayload"
+      },
+      "TableRow": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,19}$",
+            "title": "Id"
+          },
+          "cells": {
+            "items": {
+              "type": "string",
+              "maxLength": 120,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 4,
+            "minItems": 1,
+            "title": "Cells"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "cells"
+        ],
+        "title": "TableRow"
+      },
+      "TableScene": {
+        "properties": {
+          "evidence_references": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Evidence References",
+            "default": []
+          },
+          "beat_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Beat Ids",
+            "default": []
+          },
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/SceneAction"
+            },
+            "type": "array",
+            "maxItems": 40,
+            "title": "Actions"
+          },
+          "start_ms": {
+            "type": "integer",
+            "maximum": 39999.0,
+            "minimum": 0.0,
+            "title": "Start Ms",
+            "default": 0
+          },
+          "end_ms": {
+            "type": "integer",
+            "maximum": 40000.0,
+            "minimum": 1.0,
+            "title": "End Ms"
+          },
+          "visual_version": {
+            "type": "integer",
+            "const": 1,
+            "title": "Visual Version",
+            "default": 1
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,19}$",
+            "title": "Id"
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 240,
+            "minLength": 5,
+            "title": "Summary"
+          },
+          "kind": {
+            "type": "string",
+            "const": "table",
+            "title": "Kind"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/TablePayload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actions",
+          "end_ms",
+          "id",
+          "summary",
+          "kind",
+          "payload"
+        ],
+        "title": "TableScene"
       },
       "TranscriptSegment": {
         "properties": {

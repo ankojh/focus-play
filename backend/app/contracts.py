@@ -1,9 +1,7 @@
 from __future__ import annotations
 from typing import Literal, Annotated
-from pydantic import BaseModel, ConfigDict, Field, model_validator
-
-class Contract(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+from pydantic import Field, model_validator, field_validator
+from .contract_base import Contract, EvidenceRef, SceneAction
 
 class ErrorInfo(Contract):
     code: str
@@ -54,13 +52,6 @@ class ImportRequest(Contract):
     format: Literal["txt", "srt", "vtt"] = "txt"
     youtube_url: str | None = Field(default=None, max_length=300)
     provenance: str = Field(default="User supplied transcript. Access permission is supplied by the user.", max_length=500)
-
-class EvidenceRef(Contract):
-    source_id: str
-    segment_ids: list[str] = Field(min_length=1, max_length=4)
-    start_ms: int | None = None
-    end_ms: int | None = None
-    quote: str = Field(min_length=1, max_length=1800)
 
 class NarrationUnit(Contract):
     text: str = Field(min_length=10, max_length=600)
@@ -164,14 +155,6 @@ class DiagramState(Contract):
     detail: str = Field(min_length=3, max_length=70)
     role: Role = "neutral"
 
-class SceneAction(Contract):
-    kind: Literal["appear", "disappear", "highlight", "move", "draw", "change_state"]
-    target: str
-    at_ms: int = Field(ge=0)
-    to_slot: int | None = Field(default=None, ge=0, le=3)
-    state_id: str | None = None
-    beat_id: str | None = None
-
 class Scene(Contract):
     # Version-1 saved scenes have no envelope metadata. All times are absolute.
     id: str | None = None
@@ -192,6 +175,16 @@ class Scene(Contract):
         validate_scene(self)
         return self
 
+from .visual_contracts import (TableVisual, CodeVisual, ChartVisual, ImageVisual,
+    TableScene, CodeScene, ChartScene, ImageScene, AssetRecord)
+
+PlaybackScene = Annotated[Scene | TableScene | CodeScene | ChartScene | ImageScene, Field(discriminator="kind")]
+
+def legacy_scene_kinds(value):
+    if isinstance(value, list):
+        return [{"kind": "diagram", **scene} if isinstance(scene, dict) else scene for scene in value]
+    return value
+
 ShortState = Literal["queued", "generating", "validating", "synthesizing", "ready", "failed", "cancelled"]
 class Short(Contract):
     concept_id: str | None = None
@@ -210,7 +203,8 @@ class Short(Contract):
     prerequisites: list[str] = []
     narration_units: list[NarrationUnit] = []
     evidence_references: list[EvidenceRef] = []
-    scenes: list[Scene] = []
+    scenes: list[PlaybackScene] = []
+    _legacy_scenes = field_validator("scenes", mode="before")(legacy_scene_kinds)
     question: Question | None = None
     audio_path: str | None = None
     measured_duration_ms: int = 0
@@ -223,6 +217,8 @@ class Short(Contract):
     timings: dict[str, float] = {}
     @model_validator(mode="after")
     def playback(self):
+        if any(scene.kind != "diagram" for scene in self.scenes) and self.storyboard_version != 2:
+            raise ValueError("Mixed visual scenes require storyboard version 2.")
         if self.storyboard_version == 2 and self.status == "ready":
             from .storyboard import validate_timeline
             validate_timeline(self.scenes, self.narration_units, self.measured_duration_ms)
@@ -245,6 +241,8 @@ class StoryboardScene(Contract):
     connections: list[Connection] = Field(max_length=4)
     states: list[DiagramState] = Field(max_length=12)
 
+AuthoredVisual = Annotated[StoryboardScene | TableVisual | CodeVisual | ChartVisual | ImageVisual, Field(discriminator="kind")]
+
 class NarrationBeat(NarrationUnit):
     beat_id: str = Field(pattern=r"^[a-z][a-z0-9_]{0,19}$")
     scene_id: str
@@ -256,7 +254,8 @@ class StoryboardDraft(Contract):
     objective: str = Field(min_length=5, max_length=150)
     prerequisites: list[Annotated[str, Field(min_length=1, max_length=80)]] = Field(max_length=4)
     narration_units: list[NarrationBeat] = Field(min_length=2, max_length=5)
-    scenes: list[StoryboardScene] = Field(min_length=1, max_length=3)
+    scenes: list[AuthoredVisual] = Field(min_length=1, max_length=3)
+    _legacy_scenes = field_validator("scenes", mode="before")(legacy_scene_kinds)
     question: Question | None = None
     @model_validator(mode="after")
     def storyboard(self):
@@ -413,7 +412,8 @@ class ModelStoryboard(Contract):
     objective: str = Field(min_length=5, max_length=150)
     prerequisites: list[Annotated[str, Field(min_length=1, max_length=80)]] = Field(max_length=4)
     narration_units: list[ModelBeat] = Field(min_length=2, max_length=5)
-    scenes: list[StoryboardScene] = Field(min_length=1, max_length=3)
+    scenes: list[AuthoredVisual] = Field(min_length=1, max_length=3)
+    _legacy_scenes = field_validator("scenes", mode="before")(legacy_scene_kinds)
     question: ModelQuestion | None = None
 
 # Legacy flat model data is retained only for explicit adapters and tests.

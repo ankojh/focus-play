@@ -15,8 +15,8 @@ from .contracts import ProviderHealth, NarrationUnit
 from .icons import ICONS
 from .errors import AppError, Cancelled
 
-PROMPT_VERSION = "17"
-SCHEMA_VERSION = "4"
+PROMPT_VERSION = "18"
+SCHEMA_VERSION = "5-mixed-visuals"
 
 
 def check_cancel(cancel: threading.Event):
@@ -77,9 +77,30 @@ class Ollama:
                 scene_ids = [f"scene_{i}" for i in range(3)]
                 beat_ids = [f"beat_{i}" for i in range(5)]
                 schema["$defs"]["StoryboardScene"]["properties"]["id"]["enum"] = scene_ids
+                templates = schema["$defs"]["StoryboardScene"]["properties"]["template"]
+                templates["enum"] = [t for t in templates["enum"] if t != "chart"]
                 schema["$defs"]["ModelBeat"]["properties"]["scene_id"]["enum"] = scene_ids
                 schema["$defs"]["ModelBeat"]["properties"]["beat_id"]["enum"] = beat_ids
-                schema["$defs"]["SemanticOperation"]["properties"]["target"]["enum"] = node_ids + [f"conn_{i}" for i in range(4)]
+                schema["$defs"]["SemanticOperation"]["properties"]["target"]["enum"] = (node_ids + [f"conn_{i}" for i in range(4)]
+                    + [f"row_{i}" for i in range(8)] + [f"row_{i}_c{j}" for i in range(8) for j in range(4)]
+                    + [f"line_{i+1}" for i in range(30)] + [f"point_{i}" for i in range(8)]
+                    + ["image"] + [f"annotation_{i}" for i in range(6)])
+                for name in ("TableVisual", "CodeVisual", "ChartVisual", "ImageVisual"):
+                    schema["$defs"][name]["properties"]["id"]["enum"] = scene_ids
+                ids = [s["id"] for s in task["segments"]]
+                for name in ("CodePayload", "ChartPoint", "Annotation"):
+                    schema["$defs"][name]["properties"]["segment_id"]["enum"] = ids
+                schema["$defs"]["TableRow"]["properties"]["id"]["enum"] = [f"row_{i}" for i in range(8)]
+                schema["$defs"]["ChartPoint"]["properties"]["id"]["enum"] = [f"point_{i}" for i in range(8)]
+                schema["$defs"]["Annotation"]["properties"]["id"]["enum"] = [f"annotation_{i}" for i in range(6)]
+                candidates = task.get("asset_candidates", [])
+                if candidates:
+                    schema["$defs"]["ImagePayload"]["properties"]["asset_id"]["enum"] = [a["id"] for a in candidates]
+                else:
+                    # No image branch when the application has no validated candidates.
+                    scenes = schema["properties"]["scenes"]["items"]
+                    scenes["oneOf"] = [s for s in scenes["oneOf"] if s["$ref"] != "#/$defs/ImageVisual"]
+                    scenes["discriminator"]["mapping"].pop("image", None)
                 schema["$defs"]["DiagramState"]["properties"]["target"]["enum"] = node_ids
             else:
                 schema["properties"]["template"] = {"type": "string", "const": task["template"]}
@@ -125,6 +146,10 @@ class Ollama:
             "Open directly with the outcome, define necessary terms once, explain why or how, then give a takeaway or condition. "
             "Preserve the supplied example record across related clips. Do not stretch introductions or paraphrase covered outcomes. "
             "A question tests the taught point with one clearly correct answer and plausible wrong answers, and explains why the answer is right. "
+            "Choose diagram/table/code/chart/image for explanatory fit. Non-diagram payloads are bounded data; only reveal/hide/focus are supported. "
+            "Code is escaped display-only exact source text, never synthetic executable code. Tables preserve source entities. "
+            "Charts use signed finite values, explicit source units and a shared zero-inclusive linear scale; point labels must match measurements. "
+            "Images select only a supplied managed candidate ID, never a URL or path. Provenance does not prove teaching claims. "
             "Chart values must be supplied measurements, never invented. "
             "When evidence cannot answer the request, report insufficient evidence."},
             {"role": "user", "content": json.dumps(task, ensure_ascii=False)}]

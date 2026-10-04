@@ -1,4 +1,5 @@
 import type { Scene, Short } from './api';
+import { visualError } from './visualState';
 
 // Absolute audio clock, half-open interior intervals, held final frame.
 export function atTime<T extends {start_ms:number;end_ms:number}>(items:T[], time:number, duration:number):T|undefined {
@@ -8,6 +9,7 @@ export function atTime<T extends {start_ms:number;end_ms:number}>(items:T[], tim
 }
 
 export function timelineError(short:Short):string|null {
+  if(short.scenes.some(s=>s.kind && s.kind!=='diagram' && visualError(s)))return 'This short has invalid visual data. Retry lesson preparation.';
   if(short.storyboard_version!==2)return short.scenes.length?null:'This saved short has no visual scene. Retry lesson preparation.';
   const fail='This short has invalid storyboard timing. Retry lesson preparation to repair it.';
   if(!short.timeline_compiler_version || !short.audio_path || short.measured_duration_ms<1000 || short.measured_duration_ms>40000 || short.narration_units.length<2 || short.narration_units.length>5 || !short.scenes.length || short.scenes.length>3)return fail;
@@ -18,10 +20,15 @@ export function timelineError(short:Short):string|null {
   if(cursor!==short.measured_duration_ms)return fail;
   cursor=0;const ids=new Set<string>();const covered:string[]=[];
   for(const s of short.scenes){
-    if(!s.id || ids.has(s.id) || s.kind!=='diagram' || !s.summary || s.summary.length<5 || !s.evidence_references?.length || s.start_ms!==cursor || s.end_ms<=s.start_ms || s.end_ms>short.measured_duration_ms || s.nodes.length<2 || s.nodes.length>4)return fail;
+    if(!s.id || ids.has(s.id) || !s.summary || s.summary.length<5 || !s.evidence_references?.length || s.start_ms!==cursor || s.end_ms<=s.start_ms || s.end_ms>short.measured_duration_ms)return fail;
     ids.add(s.id);
     const bound=short.narration_units.filter(u=>u.scene_id===s.id);
     if(!bound.length || bound[0].start_ms!==s.start_ms || bound.at(-1)!.end_ms!==s.end_ms || JSON.stringify(s.beat_ids)!==JSON.stringify(bound.map(u=>u.beat_id)))return fail;
+    if(s.kind && s.kind!=='diagram'){
+      if(visualError(s) || s.actions.some(a=>{const beat=beats.get(a.beat_id);return !beat || beat.scene_id!==s.id || a.at_ms!==beat.start_ms;}) || bound.some(u=>!s.actions.some(a=>a.beat_id===u.beat_id)))return fail;
+      covered.push(...s.beat_ids!);cursor=s.end_ms;continue;
+    }
+    if(s.nodes.length<2 || s.nodes.length>4)return fail;
     const nodes=new Set(s.nodes.map(n=>n.id)),edges=new Map(s.connections.map(e=>[e.id,e]));
     if(nodes.size!==s.nodes.length || edges.size!==s.connections.length || s.connections.some(e=>!nodes.has(e.source)||!nodes.has(e.target)||nodes.has(e.id)))return fail;
     if(new Set(s.nodes.map(n=>n.slot)).size!==s.nodes.length || s.nodes.some(n=>n.slot<0 || n.slot>3))return fail;
