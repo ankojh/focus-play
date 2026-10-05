@@ -87,7 +87,7 @@ def test_presentation_prompt_preserves_meaning_and_separates_generation_cache(sc
                         "preserve qualifiers and exact values", "Do not use SSML", "complements rather than repeats"):
         assert instruction in prompt
     monkeypatch.setattr(model, "readiness", lambda: None)
-    assert model.fingerprint()["prompt_version"] == "20"
+    assert model.fingerprint()["prompt_version"] == "26"
 
 
 def test_malformed_json_and_whitespace_loop_get_clean_retries(scripted_model):

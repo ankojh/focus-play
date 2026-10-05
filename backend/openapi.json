@@ -2416,6 +2416,38 @@
             "maxItems": 80,
             "title": "Deferred Concept Ids",
             "default": []
+          },
+          "nothing_new": {
+            "items": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "type": "array",
+            "maxItems": 80,
+            "title": "Nothing New",
+            "default": []
+          },
+          "repeat_skips_since_sources": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Repeat Skips Since Sources",
+            "default": 0
+          },
+          "skipped_points": {
+            "items": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "type": "array",
+            "maxItems": 80,
+            "title": "Skipped Points",
+            "default": []
+          },
+          "failed_skips_in_row": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Failed Skips In Row",
+            "default": 0
           }
         },
         "additionalProperties": false,
@@ -2428,6 +2460,11 @@
       },
       "ProviderHealth": {
         "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider",
+            "default": "unknown"
+          },
           "ready": {
             "type": "boolean",
             "title": "Ready"

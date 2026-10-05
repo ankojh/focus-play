@@ -12,14 +12,14 @@ from .config import Settings
 from .contracts import ExplanationRequest, LearningRequest, Lesson, ProviderHealth, SearchResponse, SourceList, AssetRecord
 from .errors import AppError
 from .jobs import Jobs, cache_key
-from .providers import Ollama, Speech, health
+from .providers import create_model, Speech, health
 from .store import Store
 
 
 def create_app(settings=None, model=None, speech=None, youtube=None):
     config = settings or Settings()
     store = Store(config.data)
-    llm, tts = model or Ollama(config), speech or Speech(config)
+    llm, tts = model or create_model(config), speech or Speech(config)
     jobs = Jobs(store, llm, tts, config, youtube)
     @asynccontextmanager
     async def lifespan(app):

@@ -213,7 +213,9 @@ def test_narrow_coverage_finishes_honestly_without_filler(tmp_path):
         lid = client.post('/api/lessons', json=request(1200)).json()['id']
         final = wait_for(client, lid)
         assert len(final['shorts']) == 1
-        assert final['planning']['completion_reason'] == 'coverage_exhausted'
+        # Short of time, so it used its second search; no new videos, so it stops.
+        assert len(final['acquisition']['rounds']) == 2
+        assert final['planning']['completion_reason'] == 'source_limit'
         assert final['duration_ledger']['shortfall_ms'] > 0
         assert final['duration_ledger']['utilisation'] < .9
         assert final['planning']['completion_detail']
@@ -407,17 +409,16 @@ def test_focused_acquisition_and_actionable_quota_failure_are_not_exhaustion(tmp
     settings=Settings(data=tmp_path); provider=Quota()
     with TestClient(create_app(settings,MissingFacet(available=1),DurationSpeech(settings),provider)) as client:
         lid=client.post('/api/lessons',json=request(300)).json()['id']
-        failed=wait_for(client,lid,'failed')
-        assert failed['job']['error']['code']=='YOUTUBE_QUOTA_OR_ACCESS'
-        assert 'selectivity caveats' in provider.searches[-1]
-        assert failed['planning']['missing_coverage'][0]['missing_facets']==['caveat']
-        assert failed['shorts'][0]['status']=='ready'
-        ledger=failed['acquisition']
-        assert client.post(f'/api/lessons/{lid}/retry',json={}).status_code==202
+        # The focused search still runs with the planner's query; a quota error
+        # there finishes the lesson with its ready video and an actionable note,
+        # instead of failing it.
         final=wait_for(client,lid)
+        assert final['job']['error'] is None
+        assert 'selectivity caveats' in provider.searches[-1] and len(provider.searches)==2
+        assert final['planning']['missing_coverage'][0]['missing_facets']==['caveat']
+        assert final['shorts'][0]['status']=='ready'
         assert final['planning']['completion_reason']=='source_limit'
-        assert final['acquisition']==ledger and len(provider.searches)==2
-        assert final['shorts'][0]==failed['shorts'][0]
+        assert 'Check YouTube quota' in final['planning']['completion_detail']
 
 
 def test_source_cache_hits_are_separate_from_provider_calls(tmp_path):
@@ -428,17 +429,21 @@ def test_source_cache_hits_are_separate_from_provider_calls(tmp_path):
     req=request(300); query=queries(req['goal'],req['prior_knowledge'])[0]
     provider=StubYouTube(); candidate=provider.search(query)[0]
     src=provider.transcript(candidate,threading.Event())
-    key=hashlib.sha256(('youtube-search-v2:'+query.lower()).encode()).hexdigest()
-    app.state.store.cache_put(key,[candidate])
+    # The lesson ends short and uses its second search; cache that query too so
+    # this test stays offline (the synthetic key must never reach Google).
+    for q in queries(req['goal'],req['prior_knowledge']):
+        key=hashlib.sha256(('youtube-search-v2:'+q.lower()).encode()).hexdigest()
+        app.state.store.cache_put(key,[candidate])
     key=hashlib.sha256((f"youtube-caption-v2:supadata:{candidate['video_id']}:en").encode()).hexdigest()
     app.state.store.cache_put(key,{'source':src.model_dump()})
     with TestClient(app) as client:
         lid=client.post('/api/lessons',json=req).json()['id']
         final=wait_for(client,lid)
         ledger=final['acquisition']
-        assert ledger['search_cache_hits']==ledger['transcript_cache_hits']==1
+        assert final['job']['status']=='complete'
+        assert ledger['search_cache_hits']==2 and ledger['transcript_cache_hits']==1
         assert ledger['search_provider_calls']==ledger['transcript_provider_calls']==0
-        assert len(ledger['rounds'])==len(ledger['tried_video_ids'])==1
+        assert len(ledger['rounds'])==2 and len(ledger['tried_video_ids'])==1
 
 
 def test_started_http_and_quota_accounting_survives_actual_provider_errors(monkeypatch,tmp_path):
@@ -530,3 +535,346 @@ def test_cancellation_save_guard_retains_terminal_decision_and_sequences(tmp_pat
         assert saved.planning.model_call_units==3
         assert saved.job.event_sequence==3
     finally: store.close()
+
+
+def test_outcome_with_nothing_new_is_skipped_and_lesson_finishes(tmp_path):
+    # Real failure: thin sources, the planner re-taught one idea, and the third
+    # retelling failed the whole lesson. Skip it; never pad or touch ready media.
+    class Repeats(SessionModel):
+        def generate(self, contract, task, cancel, validate=None):
+            if contract is ModelStoryboard and self.draft_tasks and task['teaching']['role'] != 'recap':
+                self.draft_tasks.append(task)
+                raise AppError('NO_NEW_CONTENT', 'The sources had nothing new to add for this storyboard.', 422)
+            return super().generate(contract, task, cancel, validate)
+    settings=Settings(data=tmp_path); model=Repeats()
+    with TestClient(create_app(settings,model,DurationSpeech(settings),SessionSources())) as client:
+        lid=client.post('/api/lessons',json=request()).json()['id']
+        final=wait_for(client,lid)
+        assert final['job']['status']=='complete' and final['job']['error'] is None
+        assert all(s['status']=='ready' for s in final['shorts'])
+        roles=[s['curriculum_role'] for s in final['shorts']]
+        assert roles[0]=='core' and roles[-1]=='closing' and len(roles)==2
+        skipped=final['metrics']['repeat_skipped_shorts']
+        assert skipped>=1 and len(final['planning']['deferred_concept_ids'])==skipped
+        assert final['planning']['completion_reason']=='coverage_exhausted'
+        assert 'repeat' in final['planning']['completion_detail']
+        assert final['duration_ledger']['shortfall_ms']>0
+        # Expansion continued (to fill the time) but stopped once skips kept recurring.
+        # Stops at the 3rd skip; already-queued points from that batch are tried once each.
+        assert 3<=skipped<=6 and len(final['planning']['nothing_new'])==skipped
+        extensions=[t for t in model.plan_tasks if t['phase']=='extension']
+        assert extensions and extensions[0]['nothing_new']
+        # After two skips the planner was told the sources were exhausted.
+        assert extensions[-1]['sources_exhausted'] is True
+
+
+def test_optional_requested_short_still_reports_no_new_content(tmp_path):
+    from app.jobs import Jobs
+    settings=Settings(data=tmp_path); store=Store(settings.data)
+    try:
+        jobs=Jobs(store,SessionModel(),DurationSpeech(settings),settings,SessionSources())
+        lesson=lesson_for(300,shorts=[Short(id='extra',objective='Show another supported example',optional=True)])
+        assert not jobs.skip_repeated(lesson,lesson.shorts[0],threading.Event())
+        assert [s.id for s in lesson.shorts]==['extra'] and lesson.planning.completion_reason is None
+    finally:
+        store.close()
+
+
+def test_failed_optional_expansion_finishes_lesson_with_committed_recap(tmp_path):
+    class ExpansionFails(SessionModel):
+        def generate(self, contract, task, cancel, validate=None):
+            if contract is LessonPlan and task.get('phase') == 'extension':
+                self.plan_tasks.append(task)
+                raise AppError('MODEL_DATA_INVALID', "The local model's lesson plan failed validation after one repair.", 422)
+            return super().generate(contract, task, cancel, validate)
+    settings=Settings(data=tmp_path); model=ExpansionFails()
+    with TestClient(create_app(settings,model,DurationSpeech(settings),SessionSources())) as client:
+        lid=client.post('/api/lessons',json=request()).json()['id']
+        final=wait_for(client,lid)
+        assert final['job']['status']=='complete' and final['job']['error'] is None
+        assert [s['curriculum_role'] for s in final['shorts']][-1]=='closing'
+        assert all(s['status']=='ready' for s in final['shorts'])
+        assert final['planning']['completion_reason']=='generation_limit'
+        assert final['metrics']['expansion_plan_failures']==1
+        assert sum(t.get('phase')=='extension' for t in model.plan_tasks)==1
+
+
+def test_extension_batch_drops_extra_recap_and_items_built_on_it(tmp_path):
+    class ExtraRecap(SessionModel):
+        def generate(self, contract, task, cancel, validate=None):
+            if contract is not LessonPlan or task.get('phase') != 'extension':
+                return super().generate(contract, task, cancel, validate)
+            plan = super().generate(contract, task, cancel, None)
+            if plan.objectives:
+                first = plan.objectives[0]
+                plan.objectives.insert(0, first.model_copy(update={'concept_id': 'extra_recap', 'teaching_role': 'recap',
+                    'curriculum_role': 'closing', 'learning_outcome': 'Recall the earlier fixture outcomes', 'title': 'Recap again'}))
+                plan.objectives.append(first.model_copy(update={'concept_id': 'built_on_recap', 'dependency_ids': ['extra_recap'],
+                    'learning_outcome': 'Apply the extra recap', 'title': 'Built on recap'}))
+            if validate:
+                validate(plan)
+            return plan
+    settings=Settings(data=tmp_path); model=ExtraRecap()
+    with TestClient(create_app(settings,model,DurationSpeech(settings),SessionSources())) as client:
+        lid=client.post('/api/lessons',json=request()).json()['id']
+        final=wait_for(client,lid)
+        assert final['job']['status']=='complete'
+        concepts=[s['concept_id'] for s in final['shorts']]
+        assert 'extra_recap' not in concepts and 'built_on_recap' not in concepts
+        assert sum(s['curriculum_role']=='closing' for s in final['shorts'])==1
+        assert any(s['curriculum_role']=='extension' for s in final['shorts'])
+
+
+def test_extension_with_a_repeated_title_is_dropped_but_distinct_titles_stay(tmp_path):
+    class SameTitle(SessionModel):
+        def generate(self, contract, task, cancel, validate=None):
+            if contract is not LessonPlan or task.get('phase') != 'extension':
+                return super().generate(contract, task, cancel, validate)
+            plan = super().generate(contract, task, cancel, None)
+            if plan.objectives:
+                # Real failure: a new outcome under an already-used title.
+                plan.objectives[0] = plan.objectives[0].model_copy(update={'title': 'Explore key lookup'})
+            if validate:
+                validate(plan)
+            return plan
+    settings=Settings(data=tmp_path); model=SameTitle()
+    with TestClient(create_app(settings,model,DurationSpeech(settings),SessionSources())) as client:
+        lid=client.post('/api/lessons',json=request()).json()['id']
+        final=wait_for(client,lid)
+        titles=[o['title'] for o in final['objectives']]
+        assert titles.count('Explore key lookup')==1
+        assert any(o['curriculum_role']=='extension' for o in final['objectives'])
+
+
+
+def test_exhausted_sources_trigger_one_related_search_then_planning_continues(tmp_path):
+    # User decision: keep videos coming by fetching new sources, not padding.
+    from app.contracts import CoverageGap
+    class SearchesWhenExhausted(SessionModel):
+        searched = False
+        def generate(self, contract, task, cancel, validate=None):
+            if contract is LessonPlan and task.get('sources_exhausted'):
+                self.plan_tasks.append(task)
+                self.searched = True
+                plan = LessonPlan(sufficient_evidence=True, reason='Current sources only repeat covered points.', objectives=[],
+                                  missing_coverage=[CoverageGap(outcome='Related material for the remaining session time',
+                                                                missing_facets=[], query_intent='database index maintenance')])
+                if validate:
+                    validate(plan)
+                return plan
+            if (contract is ModelStoryboard and not self.searched and self.draft_tasks
+                    and task['teaching']['role'] != 'recap'):
+                self.draft_tasks.append(task)
+                raise AppError('NO_NEW_CONTENT', 'The sources had nothing new to add for this storyboard.', 422)
+            return super().generate(contract, task, cancel, validate)
+    class NewVideoPerSearch(SessionSources):
+        def search(self, query):
+            super().search(query)
+            return [{'video_id': ['dQw4w9WgXcQ', 'aBcDeFgHiJk'][len(self.searches)-1], 'title': 'Test-only YouTube source', 'channel': 'Test channel'}]
+    settings=Settings(data=tmp_path); model=SearchesWhenExhausted()
+    with TestClient(create_app(settings,model,DurationSpeech(settings),NewVideoPerSearch())) as client:
+        lid=client.post('/api/lessons',json=request()).json()['id']
+        final=wait_for(client,lid)
+        assert final['job']['status']=='complete'
+        rounds=final['acquisition']['rounds']
+        assert len(rounds)==2 and rounds[1]['query'].startswith('database index maintenance')
+        assert final['planning']['repeat_skips_since_sources']==0
+        assert final['metrics']['repeat_skipped_shorts']==2
+        # Planning resumed after the search and produced new ready extension shorts.
+        assert sum(s['curriculum_role']=='extension' and s['status']=='ready' for s in final['shorts'])>=1
+        assert final['planning']['completion_reason']!='coverage_exhausted'
+
+
+def test_contained_titles_are_repeats_but_one_word_titles_do_not_block():
+    from app.jobs import contained_title
+    assert contained_title('Standing Up', 'Standing Up from Ice')
+    assert contained_title('Standing Up from Ice', 'Standing Up')
+    assert not contained_title('Balance', 'Balance on One Foot')
+    assert not contained_title('Safe Falling Technique', 'Safe Falling and Recovery')
+
+
+def test_short_lesson_searches_again_even_without_a_model_query(tmp_path):
+    # Real run: the planner returned no items and no query, so the lesson
+    # stopped at 55% with a search still unused.
+    class NoQuery(SessionModel):
+        def generate(self, contract, task, cancel, validate=None):
+            if contract is LessonPlan and task.get('phase') == 'extension':
+                self.plan_tasks.append(task)
+                plan = LessonPlan(sufficient_evidence=True, reason='Nothing new in these sources.', objectives=[])
+                if validate:
+                    validate(plan)
+                return plan
+            return super().generate(contract, task, cancel, validate)
+    class Recorder(SessionSources):
+        def search(self, query):
+            super().search(query)
+            return [] if len(self.searches) > 1 else [{'video_id': 'dQw4w9WgXcQ', 'title': 'Test-only YouTube source', 'channel': 'Test channel'}]
+    settings=Settings(data=tmp_path); sources=Recorder()
+    with TestClient(create_app(settings,NoQuery(),DurationSpeech(settings),sources)) as client:
+        lid=client.post('/api/lessons',json=request()).json()['id']
+        final=wait_for(client,lid)
+        assert final['job']['status']=='complete'
+        assert len(sources.searches)==2 and len(final['acquisition']['rounds'])==2
+        assert final['planning']['completion_reason']=='source_limit'
+        assert 'search limit' in final['planning']['completion_detail']
+
+
+
+def test_failed_extra_search_finishes_lesson_with_ready_videos(tmp_path):
+    class SearchBreaksLater(SessionSources):
+        def search(self, query):
+            if self.searches:
+                raise AppError('SOURCE_SEARCH_FAILED', 'YouTube search failed. Check the server API key, then retry.', 503)
+            return super().search(query)
+    settings=Settings(data=tmp_path); model=SessionModel(available=1)
+    with TestClient(create_app(settings,model,DurationSpeech(settings),SearchBreaksLater())) as client:
+        lid=client.post('/api/lessons',json=request(1200)).json()['id']
+        final=wait_for(client,lid)
+        assert final['job']['status']=='complete' and final['job']['error'] is None
+        assert final['shorts'] and all(s['status']=='ready' for s in final['shorts'])
+        assert final['planning']['completion_reason']=='source_limit'
+        assert 'YouTube search failed' in final['planning']['completion_detail']
+        assert final['metrics']['expansion_search_failures']==1
+
+
+def test_item_built_on_a_dropped_repeat_is_dropped_not_fatal(tmp_path):
+    # Real failure: a kept item depended on a dropped repeat, so the whole
+    # extension batch was rejected twice and the lesson stopped expanding.
+    class DependsOnRepeat(SessionModel):
+        def generate(self, contract, task, cancel, validate=None):
+            if contract is not LessonPlan or task.get('phase') != 'extension':
+                return super().generate(contract, task, cancel, validate)
+            plan = super().generate(contract, task, cancel, None)
+            if len(plan.objectives) >= 2:
+                repeat, built = plan.objectives[0], plan.objectives[1]
+                plan.objectives[0] = repeat.model_copy(update={'title': 'Explore key lookup'})
+                plan.objectives[1] = built.model_copy(update={'dependency_ids': [repeat.concept_id]})
+                self.dropped = {repeat.concept_id, built.concept_id}
+            if validate:
+                validate(plan)
+            return plan
+    settings=Settings(data=tmp_path); model=DependsOnRepeat()
+    with TestClient(create_app(settings,model,DurationSpeech(settings),SessionSources())) as client:
+        lid=client.post('/api/lessons',json=request()).json()['id']
+        final=wait_for(client,lid)
+        assert final['job']['status']=='complete' and 'expansion_plan_failures' not in final['metrics']
+        concepts={o['concept_id'] for o in final['objectives']}
+        assert not concepts & model.dropped
+        assert any(o['curriculum_role']=='extension' for o in final['objectives'])
+
+
+class FailsTopic(SessionModel):
+    """Storyboards for one fixture outcome fail; fallback can be made to succeed."""
+    def __init__(self, bad='Explain leaf traversal', code='MODEL_DATA_INVALID', fallback_ok=False):
+        super().__init__()
+        self.bad, self.code, self.fallback_ok, self.bad_templates = bad, code, fallback_ok, []
+    def generate(self, contract, task, cancel, validate=None):
+        if contract is ModelStoryboard and task['teaching']['outcome'] == self.bad:
+            self.bad_templates.append(task['template'])
+            if not (self.fallback_ok and task['template'] == 'key_fact'):
+                self.draft_tasks.append(task)
+                raise AppError(self.code, 'Chart value must match a number in its own cited passage.', 422)
+        return super().generate(contract, task, cancel, validate)
+
+
+def test_short_that_keeps_failing_is_skipped_and_the_lesson_finishes(tmp_path):
+    settings=Settings(data=tmp_path); model=FailsTopic()
+    with TestClient(create_app(settings,model,DurationSpeech(settings),SessionSources())) as client:
+        lid=client.post('/api/lessons',json=request()).json()['id']
+        final=wait_for(client,lid)
+        assert final['job']['status']=='complete' and final['job']['error'] is None
+        assert all(s['status']=='ready' for s in final['shorts']) and len(final['shorts'])>=2
+        assert 'Explore leaf traversal' not in [s['objective'] for s in final['shorts']]
+        assert final['planning']['skipped_points']==['Explore leaf traversal (its draft failed the accuracy checks)']
+        assert final['metrics']['failed_shorts_skipped']==1 and final['metrics']['simpler_visual_fallbacks']==1
+        # Tried its planned visual, then the simple key-fact card, then skipped.
+        assert model.bad_templates==['process','key_fact']
+
+
+def test_simpler_visual_rescues_a_short(tmp_path):
+    settings=Settings(data=tmp_path); model=FailsTopic(fallback_ok=True)
+    with TestClient(create_app(settings,model,DurationSpeech(settings),SessionSources())) as client:
+        lid=client.post('/api/lessons',json=request()).json()['id']
+        final=wait_for(client,lid)
+        rescued=next(s for s in final['shorts'] if s['objective']=='Explore leaf traversal')
+        assert rescued['status']=='ready' and final['planning']['skipped_points']==[]
+        assert final['metrics']['simpler_visual_fallbacks']==1
+
+
+def test_review_rejection_skips_without_a_visual_retry(tmp_path):
+    settings=Settings(data=tmp_path); model=FailsTopic(code='UNSUPPORTED_CLAIM')
+    with TestClient(create_app(settings,model,DurationSpeech(settings),SessionSources())) as client:
+        lid=client.post('/api/lessons',json=request()).json()['id']
+        final=wait_for(client,lid)
+        assert final['job']['status']=='complete'
+        assert final['planning']['skipped_points']==['Explore leaf traversal (the source review could not confirm its claims)']
+        assert model.bad_templates==['process'] and 'simpler_visual_fallbacks' not in final['metrics']
+
+
+def test_lesson_with_nothing_makeable_still_reports_the_real_error(tmp_path):
+    settings=Settings(data=tmp_path); model=FailsTopic(bad='Explain key lookup'); model.available=1
+    with TestClient(create_app(settings,model,DurationSpeech(settings),SessionSources())) as client:
+        lid=client.post('/api/lessons',json=request(60)).json()['id']
+        failed=wait_for(client,lid,'failed')
+        assert failed['job']['error']['code']=='MODEL_DATA_INVALID' and failed['shorts']
+
+
+def test_three_skips_in_a_row_stop_expansion(tmp_path):
+    class AllExtensionsFail(SessionModel):
+        def generate(self, contract, task, cancel, validate=None):
+            if contract is ModelStoryboard and task['teaching']['plan'] and task['teaching']['plan']['curriculum_role']=='extension':
+                self.draft_tasks.append(task)
+                raise AppError('MODEL_DATA_INVALID', 'Draft failed.', 422)
+            return super().generate(contract, task, cancel, validate)
+    settings=Settings(data=tmp_path); model=AllExtensionsFail()
+    with TestClient(create_app(settings,model,DurationSpeech(settings),SessionSources())) as client:
+        lid=client.post('/api/lessons',json=request(600)).json()['id']
+        final=wait_for(client,lid)
+        assert final['job']['status']=='complete'
+        assert final['planning']['completion_reason']=='generation_limit'
+        assert 'in a row' in final['planning']['completion_detail']
+        assert final['metrics']['failed_shorts_skipped']>=3
+        assert sum(t['phase']=='extension' for t in model.plan_tasks)<=2
+
+
+def test_skipping_drops_queued_dependents_but_keeps_the_recap(tmp_path):
+    from app.jobs import Jobs
+    settings=Settings(data=tmp_path); store=Store(settings.data)
+    try:
+        jobs=Jobs(store,SessionModel(),DurationSpeech(settings),settings,SessionSources())
+        objectives=[Objective(concept_id=c,title=f'Point {c}',template='process',prerequisites=[],dependency_ids=d,curriculum_role=r)
+                    for c,d,r in [('a',[],'core'),('b',['a'],'core'),('c',[],'core'),('recap',['a','b','c'],'closing')]]
+        lesson=lesson_for(300,objectives=objectives,shorts=[Short(id=c,objective=f'Point {c}',concept_id=c,curriculum_role=r)
+                    for c,r in [('a','core'),('b','core'),('c','core'),('recap','closing')]])
+        assert jobs.skip_failed(lesson,lesson.shorts[0],AppError('UNSUPPORTED_CLAIM','x',422),threading.Event())
+        assert [s.id for s in lesson.shorts]==['c','recap']
+        assert lesson.planning.skipped_points==['Point a (the source review could not confirm its claims)',
+                                                'Point b (the source review could not confirm its claims)']
+        # Optional, user-requested extras are never silently skipped.
+        extra=Short(id='extra',objective='Show another example',optional=True); lesson.shorts.append(extra)
+        assert not jobs.skip_failed(lesson,extra,AppError('MODEL_DATA_INVALID','x',422),threading.Event())
+    finally:
+        store.close()
+
+
+
+def test_too_long_short_with_time_left_is_skipped_and_expansion_continues(tmp_path):
+    # Real run: one slightly-too-long extension stopped the lesson at 77% with 68 s free.
+    class OneTooLong(DurationSpeech):
+        fails = 0
+        def synthesize(self, units, key, cancel):
+            # Three core shorts publish first; fail the next (first extension) draft and its repair.
+            if len(self.durations) == 3 and self.fails < 2:
+                self.fails += 1
+                raise AppError('SPEECH_DURATION', 'This unpublished script cannot fit the remaining time.', 422)
+            return super().synthesize(units, key, cancel)
+    settings=Settings(data=tmp_path); model=SessionModel()
+    with TestClient(create_app(settings,model,OneTooLong(settings),SessionSources())) as client:
+        lid=client.post('/api/lessons',json=request()).json()['id']
+        final=wait_for(client,lid)
+        assert final['job']['status']=='complete'
+        skipped=final['planning']['skipped_points']
+        assert len(skipped)==1 and skipped[0].endswith('(its narration could not fit the time)')
+        assert not skipped[0].startswith('Recap')
+        assert final['planning']['completion_reason']!='budget_fit' or final['duration_ledger']['shortfall_ms']==0
+        assert sum(s['curriculum_role']=='extension' and s['status']=='ready' for s in final['shorts'])>=1

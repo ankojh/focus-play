@@ -28,6 +28,15 @@ def similar(a, b, threshold=.7):
     return bool(x and y) and len(x & y) / len(x | y) >= threshold
 
 
+class RepeatedContent(ValueError):
+    """Narration duplicates material already published in an earlier short.
+
+    Distinct from a repeat inside one draft: if a repair still cannot find new
+    material, the planned outcome has nothing new to add and is skipped rather
+    than failing the lesson or publishing filler.
+    """
+
+
 def check_narration(texts, earlier=(), allow_recap=False):
     for text in texts:
         for pattern, what in DANGLING:
@@ -35,8 +44,13 @@ def check_narration(texts, earlier=(), allow_recap=False):
             if match:
                 raise ValueError(f"Narration '{match.group(0)}' refers to {what}. Rewrite it as a teacher speaking to 'you' with no reference to a video.")
     for i, text in enumerate(texts):
-        if any(similar(text, other) for other in list(texts[:i]) + ([] if allow_recap else list(earlier))):
-            raise ValueError("Narration repeats an earlier point. Teach something new for this objective.")
+        if any(similar(text, other) for other in texts[:i]):
+            raise ValueError(f"Narration beat {i + 1} repeats an earlier beat in this short. Teach something new for this objective.")
+        if not allow_recap:
+            match = next((other for other in earlier if similar(text, other)), None)
+            if match:
+                raise RepeatedContent(f"Narration beat {i + 1} repeats an earlier short (\"{match[:120]}\"). "
+                                      "Teach a different supported point for this objective, not a rewording.")
 
 class SupportCheck(Contract):
     supported: bool
@@ -69,8 +83,11 @@ def validate_diagram(draft: ShortDraft):
     for node in draft.nodes:
         if node.icon not in ICONS:
             raise ValueError(f"Node {node.id} needs an icon from the allowed list.")
-        if len(node.detail.split()) < 2:
-            raise ValueError(f"Node {node.id} needs a detail line of 3 to 8 words that explains it.")
+        # 3–8 words is authoring guidance, not a publication gate: concise
+        # details such as "Speech-to-text" are valid. Length/word-size limits
+        # live in the contract; evidence and review checks are unchanged.
+        if not node.detail.strip():
+            raise ValueError(f"Node {node.id} needs a short detail line that explains it.")
     roles = {node.role for node in draft.nodes}
     if draft.template == "dos_donts" and not {"good", "bad"} <= roles:
         raise ValueError("A dos_donts diagram needs at least one node with role good and one with role bad.")

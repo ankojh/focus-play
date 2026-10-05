@@ -44,6 +44,11 @@ def live(args):
         health = client.get('/api/health'); health.raise_for_status(); data['health'] = health.json()
         if not data['health'].get('ready'):
             raise SystemExit(data['health'])
+        if args.output == 'docs/readiness-fixture-runs.json':
+            provider = data['health'].get('provider', 'local')
+            args.output = f'.runtime/{provider}-readiness-live-{int(time.time())}.json'
+        if (ROOT / args.output).exists():
+            raise SystemExit('Choose a new live output path; historical reports are not overwritten.')
         for budget in args.budgets:
             for run in range(args.runs):
                 body = {'goal': args.goal, 'prior_knowledge': args.knowledge,
@@ -110,8 +115,6 @@ def main():
     args = parser.parse_args()
     if args.runs < 1 or args.buffer_seconds < 0 or args.timeout_seconds < 1 or any(b < 60 or b > 1200 for b in args.budgets):
         parser.error('Use positive runs/timeouts, nonnegative buffer and 60–1200 second budgets.')
-    if args.mode == 'live' and args.output == 'docs/readiness-fixture-runs.json':
-        args.output = 'docs/readiness-live-runs.json'
     save(args.output, fixtures(args.buffer_seconds) if args.mode == 'fixture' else live(args))
     print('Measurements saved:', ROOT / args.output)
 

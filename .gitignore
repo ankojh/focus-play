@@ -2,6 +2,10 @@
 .runtime/
 .data/
 .env
+.env.*.backup
+*.gturbo/
+# Keep local inference payloads, ownership receipts and private benchmark reports local.
+.local-reports/
 __pycache__/
 .pytest_cache/
 *.pyc

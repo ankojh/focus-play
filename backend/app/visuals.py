@@ -39,7 +39,9 @@ def validate_visual_scene(scene, actions=None):
         raise ValueError("Actions must be in timeline order.")
     for a in actions:
         if a.kind not in CAPABILITIES[scene.kind] or a.target not in known:
-            raise ValueError("Operation or target is unsupported by this renderer.")
+            allowed = ", ".join(sorted(known))
+            raise ValueError(f"Scene {scene.id} ({scene.kind}): operation {a.kind} targeting {a.target} is unsupported by this renderer. "
+                             f"Use only reveal/hide/focus with this scene's payload targets: {allowed}. Do not use diagram node/connection IDs here.")
         if scene.kind == "table" and a.target not in primary_targets(scene) and a.kind != "highlight":
             raise ValueError("Cells inherit row visibility and support focus only.")
         if a.to_slot is not None or a.state_id is not None:
@@ -86,6 +88,14 @@ def visual_text(scene):
     return " ".join([p.alt, p.caption, *(a.label for a in p.annotations)])
 
 
+CHART_NUMBER = re.compile(r"(?<![\w.])[-+]?\d+(?:\.\d+)?(?![\w.])")
+
+
+def chartable(texts):
+    """A chart needs real numbers to plot; without them the model invents values."""
+    return any(CHART_NUMBER.search(text) for text in texts)
+
+
 def validate_visual_evidence(scene, segments, beats):
     known = {s.id: s for s in segments}
     cited = {sid for b in beats if b.scene_id == scene.id for sid in b.evidence.segment_ids}
@@ -99,7 +109,7 @@ def validate_visual_evidence(scene, segments, beats):
     if scene.kind == "chart":
         for point in p.points:
             text = passage(point.segment_id)
-            numbers = {float(v) for v in re.findall(r"(?<![\w.])[-+]?\d+(?:\.\d+)?(?![\w.])", text)}
+            numbers = {float(v) for v in CHART_NUMBER.findall(text)}
             if point.value not in numbers:
                 raise ValueError("Chart value must match a number in its own cited passage.")
             if p.unit.casefold() not in text.casefold():

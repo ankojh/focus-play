@@ -398,6 +398,15 @@ class PlanningState(Contract):
     coverage: list[OutcomeCoverage] = Field(default=[], max_length=80)
     missing_coverage: list[CoverageGap] = Field(default=[], max_length=2)
     deferred_concept_ids: list[str] = Field(default=[], max_length=80)
+    # Titles of planned points skipped because drafts only repeated earlier
+    # shorts. Shown to the planner so it does not re-plan them.
+    nothing_new: list[Annotated[str, Field(max_length=100)]] = Field(default=[], max_length=80)
+    # Repeat skips since sources last grew; at 2 the next plan must search first.
+    repeat_skips_since_sources: int = Field(default=0, ge=0)
+    # Planned points dropped because they still failed a content check, with a
+    # plain reason, shown on the lesson page. Never fails the whole lesson.
+    skipped_points: list[Annotated[str, Field(max_length=200)]] = Field(default=[], max_length=80)
+    failed_skips_in_row: int = Field(default=0, ge=0)
 
 class Readiness(Contract):
     version: Literal[1] = 1
@@ -433,6 +442,7 @@ class Lesson(Contract):
     video_rankings: list[CandidateScore] = []
 
 class ProviderHealth(Contract):
+    provider: str = "unknown"
     ready: bool
     model_ready: bool
     speech_ready: bool

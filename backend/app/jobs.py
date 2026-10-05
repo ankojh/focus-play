@@ -10,10 +10,10 @@ from .contracts import (Job, Lesson, LessonPlan, Short, StoryboardDraft, ErrorIn
 from .planning import (PLANNING_VERSION, MIN_TARGET_MS, DEFAULT_TARGET_MS, new_state, refresh,
                        aggregate, candidate_capacity, recalibrate_queued, remaining_for_batch,
                        needs_expansion, coverage_for, speech_prediction, useful_minimum)
-from .validation import similar
+from .validation import similar, word_set
 from .storyboard import STORYBOARD_VERSION, COMPILER_VERSION, compile_storyboard
 from .assets import Assets
-from .visuals import VISUAL_VERSION
+from .visuals import VISUAL_VERSION, chartable
 from .errors import AppError, Cancelled
 from .readiness import required_media, snapshot_readiness
 from .providers import check_cancel
@@ -37,6 +37,39 @@ TEMPLATES = {
     "chart": "quantitative comparison using kind chart with source values, units and a zero-inclusive scale; never legacy diagram mini-bars or invented values.",
 }
 TEMPLATE_GUIDE = " ".join(f"{name}: {text}" for name, text in TEMPLATES.items())
+
+
+# Content failures of one short: skipped, never fatal to the lesson. System
+# problems (model/speech/source unavailable, credits, work limits) still fail it.
+SKIPPABLE = {"MODEL_DATA_INVALID", "MODEL_OUTPUT_INVALID", "MODEL_OUTPUT_TRUNCATED", "UNSUPPORTED_CLAIM",
+             "TEACHING_QUALITY_FAILED", "STORYBOARD_TIMELINE_INVALID", "SPEECH_DURATION"}
+DRAFT_FAILURES = {"MODEL_DATA_INVALID", "MODEL_OUTPUT_INVALID", "MODEL_OUTPUT_TRUNCATED"}
+SIMPLE_TEMPLATE = "key_fact"
+SKIP_REASONS = {
+    "MODEL_DATA_INVALID": "its draft failed the accuracy checks",
+    "MODEL_OUTPUT_INVALID": "the model could not produce a valid draft",
+    "MODEL_OUTPUT_TRUNCATED": "the model could not produce a complete draft",
+    "UNSUPPORTED_CLAIM": "the source review could not confirm its claims",
+    "TEACHING_QUALITY_FAILED": "the teaching review rejected it",
+    "STORYBOARD_TIMELINE_INVALID": "its visuals could not be timed to the narration",
+    "SPEECH_DURATION": "its narration could not fit the time",
+}
+
+
+def contained_title(a, b):
+    """"Standing Up" vs "Standing Up from Ice": one title's words all inside the other's.
+
+    Needs at least two words in the shorter title, so a one-word title such as
+    "Balance" does not block a genuinely narrower later point.
+    """
+    x, y = word_set(a), word_set(b)
+    shorter, longer = (x, y) if len(x) <= len(y) else (y, x)
+    return len(shorter) >= 2 and shorter <= longer
+
+
+def searches_left(lesson):
+    ledger = lesson.acquisition
+    return any(not r.completed for r in ledger.rounds) or len(ledger.rounds) < ledger.round_limit
 
 
 def uid(prefix):
@@ -207,7 +240,12 @@ class Jobs:
             lesson.metrics["worker_turns"] = lesson.metrics.get("worker_turns", 0) + 1
             self.store.save(lesson)
             try:
-                check_cancel(self.cancel_flags[lid])
+                flag = self.cancel_flags[lid]
+                if any(s.status == 'ready' for s in lesson.shorts):
+                    flag.deadline = None
+                elif getattr(flag, 'deadline', None) is None:
+                    flag.deadline = turn_start + self.settings.first_playable_timeout
+                check_cancel(flag)
                 requeue = await self.advance(lid)
             except Cancelled:
                 # Preserve ready output; the cancel endpoint already persisted the user decision.
@@ -350,6 +388,20 @@ class Jobs:
         self.store.save(lesson)
         return len(chosen)
 
+    async def acquire_more(self, lesson, cancel, focus):
+        """Optional search while expanding a lesson that already has videos.
+
+        A source error here (YouTube/Supadata failure, credits, work limit)
+        stops adding material; it never fails the lesson or its ready videos.
+        Cancellation still propagates. Returns (sources added, failure detail).
+        """
+        try:
+            return await self.acquire(lesson, cancel, focus), None
+        except AppError as exc:
+            lesson.metrics["expansion_search_failures"] = lesson.metrics.get("expansion_search_failures", 0) + 1
+            return 0, (f"The extra search for more videos failed: {exc.message[:200]} "
+                       "The lesson finished with what was ready instead of padding.")
+
     async def provider_work(self, lesson, function, *args):
         state = lesson.planning
         if state and state.work_seconds >= state.work_limit_seconds:
@@ -374,7 +426,12 @@ class Jobs:
             state.model_call_units += 3
             self.store.save(lesson)
         started = time.monotonic()
+        # Aggregate only this call's counters. Bounded field-error diagnostics
+        # remain local to the adapter and are not persisted in lesson metrics.
+        self.model.attempts = []
         try:
+            if getattr(self.model, 'compact_authoring', False):
+                task = {**task, 'compact_authoring': True}
             return self.model.generate(contract, task, cancel, validate)
         finally:
             elapsed = time.monotonic() - started
@@ -382,6 +439,12 @@ class Jobs:
                 name = metric or {"LessonPlan": "plan" if task.get("phase") == "core" else "continuation_plan",
                                   "ModelStoryboard": "draft", "SupportCheck": "review", "CandidateRanking": "ranking"}.get(contract.__name__, "model")
                 self.measure(lesson, f"{name}_seconds", elapsed)
+                attempts = getattr(self.model, "attempts", [])
+                self.measure(lesson, "model_attempts", len(attempts))
+                self.measure(lesson, "model_repairs", sum(a["attempt"] > 1 for a in attempts))
+                self.measure(lesson, "model_first_pass_successes", sum(a["attempt"] == 1 and a["kind"] == "success" for a in attempts))
+                for field in ("prompt_tokens", "completion_tokens", "cached_prompt_tokens"):
+                    self.measure(lesson, field, sum(a.get(field, 0) for a in attempts))
                 if state:
                     state.work_seconds += elapsed
                 self.store.save(lesson)
@@ -429,6 +492,9 @@ class Jobs:
                 "request": key_base["request"], "phase": "core" if initial else "extension",
                 "remaining_ms": budget, "revision": state.revision,
                 "covered_outcomes": [f"{o.concept_id}|{o.learning_outcome[:48]}" for o in previous],
+                "covered_points": [{"title": o.title, "outcome": o.learning_outcome} for o in previous],
+                "nothing_new": state.nothing_new[-12:],
+                "sources_exhausted": not initial and state.repeat_skips_since_sources >= 2 and searches_left(lesson),
                 "recent_coverage": [{"id": e.concept_id, "claim": e.used_claims[0][:100] if e.used_claims else "",
                                      "segments": e.evidence_segment_ids[:2], "facets": e.supported_facets}
                                     for e in state.coverage[-4:]],
@@ -437,35 +503,80 @@ class Jobs:
         def valid(plan):
             if not initial:
                 # Identical proposed work is exhaustion, not a reason to publish duplicates.
-                plan.objectives = [o for o in plan.objectives if not any(o.concept_id == p.concept_id or
-                    (o.teaching_role != "recap" and similar(o.learning_outcome or o.title, p.learning_outcome or p.title, .8))
-                    for p in lesson.objectives)]
+                # Outcomes alone missed a re-planned "Safe Falling Mechanics" with an
+                # identical title, so near-identical titles count as duplicates too.
+                # Extra core/recap items in an extension batch are dropped the same way:
+                # the committed core/closing stay, never a reason to fail optional expansion.
+                dropped = {o.concept_id for o in plan.objectives if o.curriculum_role != "extension" or any(
+                    o.concept_id == p.concept_id or
+                    (o.teaching_role != "recap" and (similar(o.learning_outcome or o.title, p.learning_outcome or p.title, .8)
+                                                     or similar(o.title, p.title, .8) or contained_title(o.title, p.title)))
+                    for p in lesson.objectives)}
+                # Real failure: a kept item depended on a dropped repeat, so the
+                # whole batch failed validation. Drop anything built on a dropped item.
+                while True:
+                    more = {o.concept_id for o in plan.objectives if set(o.dependency_ids) & dropped} - dropped
+                    if not more:
+                        break
+                    dropped |= more
+                plan.objectives = [o for o in plan.objectives if o.concept_id not in dropped]
                 plan.examples = [e for e in plan.examples if e.id not in {old.id for old in lesson.examples}]
-                if any(o.curriculum_role != "extension" for o in plan.objectives):
-                    raise ValueError("Additional batches must be distinct in-goal extensions, not more core or closing.")
             check_plan(plan, segments, count, budget, calibrated=True, previous=previous,
                        examples_before=lesson.examples)
             if len(lesson.examples) + len(plan.examples) > 2:
                 raise ValueError("Use at most two recurring examples across the lesson.")
         key = cache_key({**key_base, "stage": "session-plan", "task": task})
         cached = self.store.cache_get(key)
-        plan = LessonPlan.model_validate(cached) if cached else await asyncio.to_thread(self.generate, lesson, LessonPlan, task, cancel, valid)
+        try:
+            plan = LessonPlan.model_validate(cached) if cached else await asyncio.to_thread(self.generate, lesson, LessonPlan, task, cancel, valid)
+        except AppError as exc:
+            # Expansion is optional. A bounded model failure here stops adding
+            # material; queued work (e.g. the committed recap) still finishes.
+            if initial or exc.code not in {"MODEL_DATA_INVALID", "MODEL_OUTPUT_INVALID", "MODEL_OUTPUT_TRUNCATED", "MODEL_TASK_TIMEOUT"}:
+                raise
+            state.completion_reason = "generation_limit"
+            state.completion_detail = ("The model could not plan more distinct material within its bounded attempts, "
+                                       "so the lesson finished with what was ready instead of padding.")
+            lesson.metrics["expansion_plan_failures"] = lesson.metrics.get("expansion_plan_failures", 0) + 1
+            self.store.save(lesson)
+            return False
         valid(plan)
         check_cancel(cancel)
         lesson.metrics["plan_cache_hits"] = lesson.metrics.get("plan_cache_hits", 0) + int(bool(cached))
         if initial:
             lesson.metrics["plan_cache_hit"] = int(bool(cached))
         state.missing_coverage = plan.missing_coverage
+        if task["sources_exhausted"] and plan.missing_coverage:
+            # Drafts kept repeating the current sources: search for a related
+            # subtopic before planning more from the same exhausted material.
+            focus = " ".join(g.query_intent for g in plan.missing_coverage)
+            added, failure = await self.acquire_more(lesson, cancel, focus)
+            if added:
+                state.repeat_skips_since_sources = 0
+                return await self.plan_batch(lesson, cancel)
+            state.completion_reason = "source_limit"
+            state.completion_detail = failure or ("The sources ran out of distinct material and the search limit was reached, "
+                                                  "so the lesson finished with what was ready instead of padding.")
+            self.store.save(lesson)
+            return False
         if not plan.sufficient_evidence or not plan.objectives:
             # The original two-round allowance is shared with focused acquisition.
-            if plan.missing_coverage or not plan.sufficient_evidence:
+            # A short lesson searches again even when the model suggests no query:
+            # the student asked for the full time, so fetch new videos first.
+            if plan.missing_coverage or not plan.sufficient_evidence or (not initial and searches_left(lesson)):
                 focus = " ".join(g.query_intent for g in plan.missing_coverage) or lesson.request.goal
-                if await self.acquire(lesson, cancel, focus):
+                added, failure = (await self.acquire(lesson, cancel, focus), None) if initial else await self.acquire_more(lesson, cancel, focus)
+                if added:
+                    state.repeat_skips_since_sources = 0
                     return await self.plan_batch(lesson, cancel, initial=initial)
                 state.completion_reason = "source_limit"
+                state.completion_detail = failure or ("The videos found ran out of new material and the search limit was reached, "
+                                                      "so the lesson finished with what was ready instead of padding.")
             else:
                 state.completion_reason = "coverage_exhausted"
-            state.completion_detail = plan.reason or "The available sources do not support more distinct useful outcomes for this goal."
+                state.completion_detail = plan.reason or "The available sources do not support more distinct useful outcomes for this goal."
+            if initial:
+                state.completion_detail = plan.reason or state.completion_detail
             if initial:
                 raise AppError("INSUFFICIENT_EVIDENCE", "Available YouTube transcripts cannot support this goal within the search limit. " + state.completion_detail, 422)
             self.store.save(lesson)
@@ -497,16 +608,31 @@ class Jobs:
         return True
 
     async def rank(self,lesson,fetched,cancel,focus=None):
+        if getattr(self.model, 'compact_authoring', False):
+            # Ranking is optional: use the same source-order fallback previously
+            # used after model failure, without spending 3 calls before playback.
+            check_cancel(cancel)
+            lesson.metrics['ranking_model_skipped'] = lesson.metrics.get('ranking_model_skipped', 0) + 1
+            chosen, channels = [], {}
+            for candidate, source in fetched:
+                channel = candidate.get('channel', '')
+                if channel and channels.get(channel, 0) >= 2:
+                    continue
+                chosen.append(source)
+                channels[channel] = channels.get(channel, 0) + 1
+                if len(chosen) == KEEP:
+                    break
+            return chosen
         if len(fetched)<=1:
             return [s for _,s in fetched]
         await self.stage(lesson,"Choosing the best videos")
         task=ranking_task(lesson.request,fetched,focus)
-        key=cache_key({"stage":"rank","model":self.settings.model,"task":task})
+        key=cache_key({"stage":"rank","settings":lesson.provider_settings,"task":task})
         cached=self.store.cache_get(key)
         try:
             ranking=CandidateRanking.model_validate(cached) if cached else await asyncio.to_thread(self.generate,lesson,CandidateRanking,task,cancel,validator(fetched))
         except AppError as exc:
-            if exc.code == "GENERATION_LIMIT":
+            if exc.code not in {"MODEL_DATA_INVALID", "MODEL_OUTPUT_INVALID", "MODEL_OUTPUT_TRUNCATED"}:
                 raise
             # Ranking only improves the choice. Keep YouTube's order when the model cannot rank.
             return [s for _,s in fetched][:KEEP]
@@ -559,6 +685,50 @@ class Jobs:
             "request":lesson.request.model_dump(exclude={"request_id","source_mode","source_ids"})}
         return segments,key_base
 
+    @staticmethod
+    def pin_provider(lesson, selected):
+        saved = lesson.provider_settings
+        if saved:
+            if "provider" in saved:
+                compatible = saved == selected
+            else:
+                # Pre-migration fingerprints were Ollama-only. Compare every
+                # saved field; do not retrofit new metadata onto historical media.
+                compatible = selected.get("provider", "ollama") == "ollama" and all(selected.get(k) == v for k, v in saved.items())
+            if not compatible and "provider" in saved:
+                # Same-runtime authoring fixes may resume unpublished lessons.
+                # Preserve the committed plan, source/work allowances and IDs;
+                # once media is ready, never silently rebind its provenance.
+                repair_versions = {"prompt_version", "parser_version", "repair_policy_version", "authoring_version"}
+                same_runtime = ({k: v for k, v in saved.items() if k not in repair_versions}
+                                == {k: v for k, v in selected.items() if k not in repair_versions})
+                unpublished = (not lesson.coverage_history and not any(
+                    s.status == 'ready' or s.audio_path or s.scenes or s.narration_units for s in lesson.shorts))
+                if same_runtime and unpublished:
+                    lesson.provider_settings = dict(selected)
+                    return
+            if not compatible:
+                raise AppError("PROVIDER_SETTINGS_MISMATCH", "This unfinished lesson belongs to a different provider/model/settings profile. Restore its original profile or create a fresh lesson. Ready output and source allowances are preserved.", 422)
+        else:
+            lesson.provider_settings = selected
+
+    async def repair_media(self, lesson, short, cancel):
+        speech_settings = self.speech.fingerprint()
+        if short.provider_settings.get("speech", lesson.provider_settings.get("speech")) != speech_settings:
+            raise AppError("MEDIA_REPAIR_SETTINGS", "Restore this short's original speech settings before repairing its missing audio.", 422)
+        await self.provider_work(lesson, self.speech.prepare)
+        units = [u.model_copy(deep=True) for u in short.narration_units]
+        audio, measured, _ = await self.provider_work(lesson, self.speech.synthesize, units, short.audio_path.removesuffix(".wav"), cancel)
+        check_cancel(cancel)
+        if measured != short.measured_duration_ms or [(u.start_ms, u.end_ms) for u in units] != [(u.start_ms, u.end_ms) for u in short.narration_units]:
+            raise AppError("MEDIA_REPAIR_TIMING", "The repaired voice no longer matches the published timeline. Restore the original speech provider/settings; ready content is unchanged.", 422)
+        short.audio_path = audio
+        required_media(short, self.settings.data, self.assets)
+        short.status = "ready"
+        Short.model_validate(short.model_dump())
+        refresh(lesson)
+        self.store.save(lesson)
+
     async def advance(self, lid):
         started = time.monotonic()
         lesson = self.store.lesson(lid)
@@ -571,6 +741,21 @@ class Jobs:
                 # online for an otherwise unnecessary completion checkpoint.
                 self.complete(lesson)
                 return False
+        # Published media repair must not depend on an obsolete/unavailable LLM
+        # or spend source credits. Keep historical provenance and exact timings.
+        short = next((s for s in lesson.shorts if s.status != "ready"), None)
+        if short and short.audio_path and short.narration_units and short.measured_duration_ms:
+            await self.repair_media(lesson, short, cancel)
+            return True
+        provider_started = time.monotonic()
+        await self.stage(lesson, "checking local providers")
+        fingerprint = await self.provider_work(lesson, self.model.fingerprint)
+        selected = {**fingerprint, "speech": self.speech.fingerprint(), "language": lesson.request.language}
+        self.pin_provider(lesson, selected)
+        await self.provider_work(lesson, self.speech.prepare)
+        check_cancel(cancel)
+        if "provider_load_seconds" not in lesson.metrics:
+            lesson.metrics["provider_load_seconds"] = time.monotonic() - provider_started
         source_start=time.monotonic()
         if not self.youtube_sources(lesson):
             while any(not r.completed for r in lesson.acquisition.rounds) or len(lesson.acquisition.rounds) < lesson.acquisition.round_limit:
@@ -580,14 +765,6 @@ class Jobs:
             if not self.youtube_sources(lesson):
                 raise AppError("NO_USABLE_TRANSCRIPTS","No accessible English YouTube transcripts were found within this lesson's search limit. Check source access, then start a new, more focused request; retry does not reset the acquisition allowance.",422)
         lesson.metrics["source_acquisition_seconds"]=lesson.metrics.get("source_acquisition_seconds",0)+time.monotonic()-source_start
-        started=time.monotonic()
-        await self.stage(lesson, "checking local providers")
-        fingerprint = await self.provider_work(lesson, self.model.fingerprint)
-        await self.provider_work(lesson, self.speech.prepare)
-        check_cancel(cancel)
-        lesson.provider_settings = {**fingerprint, "speech": self.speech.fingerprint(), "language": lesson.request.language}
-        if "provider_load_seconds" not in lesson.metrics:
-            lesson.metrics["provider_load_seconds"] = time.monotonic() - started
         segments,key_base=self.context(lesson)
         if not lesson.shorts:
             lesson.status = "preparing"
@@ -612,23 +789,6 @@ class Jobs:
         if short is None:
             self.complete(lesson)
             return False
-        if short.audio_path and short.narration_units and short.measured_duration_ms:
-            # Missing-media recovery reuses the exact published script/key, not
-            # a newly calibrated draft. Refuse incompatible voice or timing.
-            if short.provider_settings.get("speech", lesson.provider_settings["speech"]) != lesson.provider_settings["speech"]:
-                raise AppError("MEDIA_REPAIR_SETTINGS", "Restore this short's original speech settings before repairing its missing audio.", 422)
-            units = [u.model_copy(deep=True) for u in short.narration_units]
-            audio, measured, _ = await self.provider_work(lesson, self.speech.synthesize, units, short.audio_path.removesuffix(".wav"), cancel)
-            check_cancel(cancel)
-            if measured != short.measured_duration_ms or [(u.start_ms, u.end_ms) for u in units] != [(u.start_ms, u.end_ms) for u in short.narration_units]:
-                raise AppError("MEDIA_REPAIR_TIMING", "The repaired voice no longer matches the published timeline. Restore the original speech provider/settings; ready content is unchanged.", 422)
-            short.audio_path = audio
-            required_media(short, self.settings.data, self.assets)
-            short.status = "ready"
-            Short.model_validate(short.model_dump())
-            refresh(lesson)
-            self.store.save(lesson)
-            return True
         if lesson.planning:
             state = lesson.planning
             if state.candidate_attempts >= state.candidate_limit:
@@ -657,6 +817,12 @@ class Jobs:
                     raise AppError("INSUFFICIENT_EVIDENCE","Available YouTube transcripts cannot support this additional short. Retry or start a more focused lesson.",422)
                 segments,key_base=self.context(lesson,focus)
         template = "example" if short.optional and short.objective.startswith("Show") else objective.template if objective else "process"
+        if template == "chart" and not chartable(s.text for s in segments if s.id in required_ids):
+            # Real failure: "Soil Nutrients" was planned as a chart but its passage has
+            # no numbers, so the model plotted invented 1/2/3 values and the short
+            # failed. Compare the items instead; same teaching, no made-up data.
+            template = "comparison"
+            lesson.metrics["chart_without_numbers"] = lesson.metrics.get("chart_without_numbers", 0) + 1
         history = teaching_context(lesson, short)
         earlier_narration = history["recent_narration"]
         earlier_questions = [s.question.prompt for s in lesson.shorts[:index] if s.question][-6:]
@@ -718,61 +884,81 @@ class Jobs:
             short.source_review_reason = cached["source_review_reason"]
             short.teaching_diagnostics = cached["teaching_diagnostics"]
             short.review_repair_reasons = cached["review_repair_reasons"]
-        draft = StoryboardDraft.model_validate(cached["draft"]) if cached else attach_evidence(await asyncio.to_thread(self.generate, lesson, ModelStoryboard, task, cancel, valid), segments)
-        valid(draft)
-        short.timings["generation_seconds"] = time.monotonic() - model_start
-        await self.stage(lesson, "validating source references", short, "validating")
-        validation_start = time.monotonic()
-        if not cached:
-            draft = await self.reviewed(draft, task, segments, valid, cancel, short, lesson)
-            self.cache_draft(short_key, draft, short)
-        short.timings["validation_seconds"] = time.monotonic() - validation_start
-        await self.stage(lesson, "generating local speech", short, "synthesizing")
-        speech_start = time.monotonic()
-        # Duration repair is separate from the two schema repairs; voice speed remains fixed.
-        repair_words = max(30, min(50, int(target_words * .7)))
-        for duration_attempt in range(2):
-            speech_key = cache_key({"texts": [u.text for u in draft.narration_units], "settings": lesson.provider_settings, "sources": key_base["sources"], "language": lesson.request.language,
-                                    "storyboard_version": STORYBOARD_VERSION, "timeline_compiler_version": COMPILER_VERSION})
-            try:
-                audio, duration, audio_cached = await self.provider_work(lesson, self.speech.synthesize, draft.narration_units, speech_key, cancel)
-                if duration > capacity:
-                    words = len(" ".join(u.text for u in draft.narration_units).split())
-                    repair_words = max(30, int(words * capacity / duration * .9))
-                    raise AppError("SPEECH_DURATION", f"Measured speech must fit the remaining {capacity}ms. Shorten to about {repair_words} words.", 422)
-                break
-            except AppError as exc:
-                if exc.code != "SPEECH_DURATION":
-                    raise
-                if duration_attempt:
-                    if lesson.planning and not short.optional and short.curriculum_role in {"extension", "closing"}:
-                        # A good but unfit candidate stays unpublished. Defer its
-                        # dependent queued work too, rather than dropping prerequisites.
-                        deferred = {short.concept_id}
-                        while True:
-                            dependents = {o.concept_id for o in lesson.objectives if set(o.dependency_ids) & deferred}
-                            if dependents <= deferred:
-                                break
-                            deferred |= dependents
-                        removed = [s for s in lesson.shorts if s.status != "ready" and s.concept_id in deferred]
-                        lesson.shorts = [s for s in lesson.shorts if s not in removed]
-                        lesson.short_ids = [s.id for s in lesson.shorts]
-                        lesson.planning.deferred_concept_ids.extend(s.concept_id for s in removed)
-                        lesson.planning.completion_reason = "budget_fit"
-                        lesson.planning.completion_detail = "Additional supported content could not fit the remaining authorised time after a bounded speech repair. Ready videos were not changed or padded."
-                        lesson.planning.revision += 1
-                        refresh(lesson)
-                        check_cancel(cancel)
-                        self.store.save(lesson)
-                        return True
-                    raise
-                task["target_words"] = repair_words
-                task["task"] += " " + exc.message + f" Shorten to about {repair_words} words. Repair only this unpublished activity, not any ready content."
-                draft = attach_evidence(await asyncio.to_thread(self.generate, lesson, ModelStoryboard, task, cancel, valid, metric="repair"), segments)
+        try:
+            draft = StoryboardDraft.model_validate(cached["draft"]) if cached else await self.draft_with_fallback(lesson, task, cancel, valid, segments)
+            valid(draft)
+            short.timings["generation_seconds"] = time.monotonic() - model_start
+            await self.stage(lesson, "validating source references", short, "validating")
+            validation_start = time.monotonic()
+            if not cached:
                 draft = await self.reviewed(draft, task, segments, valid, cancel, short, lesson)
                 self.cache_draft(short_key, draft, short)
-        else:
-            raise AppError("SPEECH_DURATION", "Speech could not fit the short duration limit.", 422)
+            short.timings["validation_seconds"] = time.monotonic() - validation_start
+            await self.stage(lesson, "generating local speech", short, "synthesizing")
+            speech_start = time.monotonic()
+            # Duration repair is separate from the two schema repairs; voice speed remains fixed.
+            repair_words = max(30, min(50, int(target_words * .7)))
+            for duration_attempt in range(2):
+                speech_key = cache_key({"texts": [u.text for u in draft.narration_units], "settings": lesson.provider_settings, "sources": key_base["sources"], "language": lesson.request.language,
+                                        "storyboard_version": STORYBOARD_VERSION, "timeline_compiler_version": COMPILER_VERSION})
+                try:
+                    audio, duration, audio_cached = await self.provider_work(lesson, self.speech.synthesize, draft.narration_units, speech_key, cancel)
+                    if duration > capacity:
+                        words = len(" ".join(u.text for u in draft.narration_units).split())
+                        repair_words = max(30, int(words * capacity / duration * .9))
+                        raise AppError("SPEECH_DURATION", f"Measured speech must fit the remaining {capacity}ms. Shorten to about {repair_words} words.", 422)
+                    break
+                except AppError as exc:
+                    if exc.code != "SPEECH_DURATION":
+                        raise
+                    if duration_attempt:
+                        if lesson.planning and not short.optional and short.curriculum_role in {"extension", "closing"}:
+                            # A good but unfit candidate stays unpublished. Defer its
+                            # dependent queued work too, rather than dropping prerequisites.
+                            deferred = {short.concept_id}
+                            while True:
+                                dependents = {o.concept_id for o in lesson.objectives if set(o.dependency_ids) & deferred}
+                                if dependents <= deferred:
+                                    break
+                                deferred |= dependents
+                            removed = [s for s in lesson.shorts if s.status != "ready" and s.concept_id in deferred]
+                            lesson.shorts = [s for s in lesson.shorts if s not in removed]
+                            lesson.short_ids = [s.id for s in lesson.shorts]
+                            state = lesson.planning
+                            state.deferred_concept_ids.extend(s.concept_id for s in removed)
+                            state.revision += 1
+                            refresh(lesson)
+                            # Real run: one slightly-too-long short stopped the lesson at
+                            # 77% with 68 s free. Only stop when no useful short still fits.
+                            if remaining_for_batch(lesson) < 2 * useful_minimum(lesson):
+                                state.completion_reason = "budget_fit"
+                                state.completion_detail = "Additional supported content could not fit the remaining authorised time after a bounded speech repair. Ready videos were not changed or padded."
+                            else:
+                                state.skipped_points = (state.skipped_points + [f"{s.objective[:80]} ({SKIP_REASONS['SPEECH_DURATION']})" for s in removed])[-80:]
+                                state.failed_skips_in_row += 1
+                                if state.failed_skips_in_row >= 3:
+                                    state.completion_reason = "generation_limit"
+                                    state.completion_detail = ("Several planned points in a row could not be made accurately, "
+                                                               "so the lesson stopped adding material instead of publishing them.")
+                            check_cancel(cancel)
+                            self.store.save(lesson)
+                            return True
+                        raise
+                    task["target_words"] = repair_words
+                    task["task"] += " " + exc.message + f" Shorten to about {repair_words} words. Repair only this unpublished activity, not any ready content."
+                    draft = attach_evidence(await asyncio.to_thread(self.generate, lesson, ModelStoryboard, task, cancel, valid, metric="repair"), segments)
+                    draft = await self.reviewed(draft, task, segments, valid, cancel, short, lesson)
+                    self.cache_draft(short_key, draft, short)
+            else:
+                raise AppError("SPEECH_DURATION", "Speech could not fit the short duration limit.", 422)
+        except AppError as exc:
+            # Repeating published shorts means this outcome has nothing new;
+            # skip it instead of failing the lesson or publishing filler.
+            if exc.code == "NO_NEW_CONTENT" and self.skip_repeated(lesson, short, cancel):
+                return True
+            if exc.code in SKIPPABLE and self.skip_failed(lesson, short, exc, cancel):
+                return True
+            raise
         check_cancel(cancel)
         short.timings["speech_seconds"] = time.monotonic() - speech_start
         compile_start = time.monotonic()
@@ -780,7 +966,10 @@ class Jobs:
             scenes, units = compile_storyboard(draft, duration, self.assets)
             self.assets.reference(scenes, lesson.id, short.id)
         except ValueError as exc:
-            raise AppError("STORYBOARD_TIMELINE_INVALID", "The measured storyboard could not be compiled. Retry to regenerate this short; ready shorts are preserved.", 422) from exc
+            error = AppError("STORYBOARD_TIMELINE_INVALID", "The measured storyboard could not be compiled. Retry to regenerate this short; ready shorts are preserved.", 422)
+            if self.skip_failed(lesson, short, error, cancel):
+                return True
+            raise error from exc
         check_cancel(cancel)
         short.timings["storyboard_compile_seconds"] = time.monotonic() - compile_start
         short.narration_units = units
@@ -796,6 +985,8 @@ class Jobs:
         short.storyboard_version = STORYBOARD_VERSION
         short.timeline_compiler_version = COMPILER_VERSION
         short.status = "ready"
+        if lesson.planning:
+            lesson.planning.failed_skips_in_row = 0
         # Capacity was checked before publication; only queued predictions may shrink.
         if lesson.planning:
             try:
@@ -855,6 +1046,93 @@ class Jobs:
         self.store.save(lesson)
         # Re-enter at the measured checkpoint rather than prematurely completing
         # the original fixed outline. The next advance may select a stable batch.
+        return True
+
+    async def draft_with_fallback(self, lesson, task, cancel, valid, segments):
+        """Draft a short; if it still fails after its repair, try once with the simplest visual.
+
+        Real failure: a chart planned for a passage with no numbers. The narration
+        was fine; only the visual was impossible to do honestly. A key-fact card
+        (main point plus supports) avoids most visual-specific checks.
+        The task is updated in place so later review/speech repairs keep it.
+        """
+        try:
+            return attach_evidence(await asyncio.to_thread(self.generate, lesson, ModelStoryboard, task, cancel, valid), segments)
+        except AppError as exc:
+            if exc.code not in DRAFT_FAILURES or task.get("template") == SIMPLE_TEMPLATE:
+                raise
+        lesson.metrics["simpler_visual_fallbacks"] = lesson.metrics.get("simpler_visual_fallbacks", 0) + 1
+        task["template"] = SIMPLE_TEMPLATE
+        task["task"] += (" The previous visual could not be made accurately. Use a simple key_fact diagram: "
+                         "the main point first, then 1 to 3 supporting points from the passages.")
+        return attach_evidence(await asyncio.to_thread(self.generate, lesson, ModelStoryboard, task, cancel, valid, metric="repair"), segments)
+
+    def skip_failed(self, lesson, short, exc, cancel):
+        """Skip a planned short that still fails a content check after its repairs.
+
+        One inaccurate or unbuildable short no longer fails the whole lesson: it is
+        dropped, recorded for the learner, and the lesson keeps going. Queued shorts
+        that depend on it are dropped too (they would build on an untaught point),
+        except the closing recap, which recaps whatever was published.
+        Returns False (so the lesson fails) for user-requested optional shorts, or
+        when nothing at all could be made.
+        """
+        if not lesson.planning or short.optional or short.status == "ready" or short not in lesson.shorts:
+            return False
+        dropped = {short.concept_id}
+        while True:
+            more = {o.concept_id for o in lesson.objectives if set(o.dependency_ids) & dropped and o.curriculum_role != "closing"} - dropped
+            if not more:
+                break
+            dropped |= more
+        removed = [s for s in lesson.shorts if s is short or (s.status != "ready" and s.concept_id in dropped and s.curriculum_role != "closing")]
+        kept = [s for s in lesson.shorts if s not in removed]
+        if not kept:
+            return False  # Nothing ready and nothing left to try: report the real error.
+        state = lesson.planning
+        lesson.shorts = kept
+        lesson.short_ids = [s.id for s in kept]
+        state.deferred_concept_ids.extend(s.concept_id for s in removed)
+        reason = SKIP_REASONS.get(exc.code, "it could not be made accurately")
+        state.skipped_points = (state.skipped_points + [f"{s.objective[:80]} ({reason})" for s in removed])[-80:]
+        state.failed_skips_in_row += 1
+        if state.failed_skips_in_row >= 3:
+            state.completion_reason = "generation_limit"
+            state.completion_detail = ("Several planned points in a row could not be made accurately, "
+                                       "so the lesson stopped adding material instead of publishing them.")
+        lesson.metrics["failed_shorts_skipped"] = lesson.metrics.get("failed_shorts_skipped", 0) + len(removed)
+        state.revision += 1
+        refresh(lesson)
+        check_cancel(cancel)
+        self.store.save(lesson)
+        return True
+
+    def skip_repeated(self, lesson, short, cancel):
+        """Drop an unpublished planned short whose outcome only repeats published shorts.
+
+        Ready media is untouched. Dependents stay queued because the concept is
+        already taught by the earlier shorts it repeated. Expansion continues so
+        the session can still fill its time: the planner is told which points had
+        nothing new, and after two skips it must search for related material.
+        It stops only once searches are used up or skips keep recurring.
+        """
+        if not lesson.planning or short.optional or short.status == "ready" or short not in lesson.shorts:
+            return False
+        state = lesson.planning
+        lesson.shorts = [s for s in lesson.shorts if s is not short]
+        lesson.short_ids = [s.id for s in lesson.shorts]
+        state.deferred_concept_ids.append(short.concept_id)
+        state.nothing_new = (state.nothing_new + [short.objective[:100]])[-80:]
+        state.repeat_skips_since_sources += 1
+        if state.repeat_skips_since_sources >= 3 or (state.repeat_skips_since_sources >= 2 and not searches_left(lesson)):
+            state.completion_reason = "coverage_exhausted"
+            state.completion_detail = ("The sources ran out of distinct material: drafts only repeated earlier shorts, "
+                                       "so those points were skipped instead of publishing repeats.")
+        lesson.metrics["repeat_skipped_shorts"] = lesson.metrics.get("repeat_skipped_shorts", 0) + 1
+        lesson.planning.revision += 1
+        refresh(lesson)
+        check_cancel(cancel)
+        self.store.save(lesson)
         return True
 
     def complete(self, lesson):

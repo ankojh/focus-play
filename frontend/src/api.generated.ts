@@ -1098,9 +1098,34 @@ export interface components {
              * @default []
              */
             deferred_concept_ids: string[];
+            /**
+             * Nothing New
+             * @default []
+             */
+            nothing_new: string[];
+            /**
+             * Repeat Skips Since Sources
+             * @default 0
+             */
+            repeat_skips_since_sources: number;
+            /**
+             * Skipped Points
+             * @default []
+             */
+            skipped_points: string[];
+            /**
+             * Failed Skips In Row
+             * @default 0
+             */
+            failed_skips_in_row: number;
         };
         /** ProviderHealth */
         ProviderHealth: {
+            /**
+             * Provider
+             * @default unknown
+             */
+            provider: string;
             /** Ready */
             ready: boolean;
             /** Model Ready */

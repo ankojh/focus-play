@@ -14,49 +14,80 @@ from .config import Settings
 from .contracts import ProviderHealth, NarrationUnit
 from .icons import ICONS
 from .errors import AppError, Cancelled
+from .llm.authoring import authoring_rules, storyboard_repair_inventory
+from .llm.json_guard import JSONKeyGuard
+from .validation import RepeatedContent
 
-PROMPT_VERSION = "20"
+PROMPT_VERSION = "26"
 SCHEMA_VERSION = "6-session-planning"
+
+
+def strict_json_object(output):
+    def pairs(items):
+        result = {}
+        for key, value in items:
+            if key in result:
+                raise ValueError("Duplicate JSON field: " + key)
+            result[key] = value
+        return result
+    def constant(value):
+        raise ValueError("Non-finite JSON constant: " + value)
+    if output.lstrip().startswith("```"):
+        raise ValueError("Markdown fences are not JSON. Return the raw JSON object only, starting with {, without any backticks or commentary.")
+    value = json.loads(output, object_pairs_hook=pairs, parse_constant=constant)
+    if not isinstance(value, dict):
+        raise ValueError("Return exactly one JSON object.")
+    return value
 
 
 def check_cancel(cancel: threading.Event):
     if cancel.is_set():
         raise Cancelled()
+    if getattr(cancel, 'deadline', None) is not None and time.monotonic() >= cancel.deadline:
+        raise AppError('FIRST_PLAYABLE_TIMEOUT', 'Preparation exceeded the first-video time limit and was stopped. Your sources and any ready videos are saved. No more automatic retries are running.', 422)
 
-class Ollama:
+class GenerationService:
+    """Shared task-specialised prompts, strict validation and three-attempt policy.
+
+    Adapters implement readiness/fingerprint and complete; they never repair or
+    execute model tools. No SDK/network retry is hidden under this layer.
+    """
+    provider_name = "ollama"
+    output_setting = "OLLAMA_PREDICT"
+    compact_authoring = True
+
     def __init__(self, settings: Settings):
         self.settings = settings
         self.digest = None
         self.details = {}
 
-    def readiness(self):
-        try:
-            with httpx.Client(base_url=self.settings.ollama_url, timeout=5, trust_env=False) as client:
-                tags = client.get("/api/tags")
-                tags.raise_for_status()
-                model = next((m for m in tags.json().get("models", []) if m["name"] == self.settings.model or m["name"] == self.settings.model + ":latest"), None)
-                if not model:
-                    raise AppError("MODEL_MISSING", f"Install the local model with: ollama pull {self.settings.model}", 503)
-                info = client.post("/api/show", json={"model": self.settings.model})
-                info.raise_for_status()
-                self.details = info.json()
-                if self.details.get("remote_model") or self.details.get("remote_host") or model.get("remote_host") or "cloud" in model["name"].lower():
-                    raise AppError("REMOTE_MODEL_REJECTED", "This model uses a remote service. Select an installed local model.", 503)
-                self.digest = model["digest"]
-                return self.digest
-        except httpx.HTTPError:
-            raise AppError("OLLAMA_UNAVAILABLE", "Ollama is unavailable. Start Ollama on loopback, then retry.", 503) from None
-
-    def fingerprint(self):
-        self.readiness()
-        return {"model": self.settings.model, "digest": self.digest, "context": self.settings.context,
-                "num_predict": self.settings.predict, "temperature": 0, "seed": 42, "retry_seeds": [43, 44],
-                "repeat_penalty": 1.0, "think": False,
-                "prompt_version": PROMPT_VERSION, "schema_version": SCHEMA_VERSION,
-                "quantization": self.details.get("details", {}).get("quantization_level")}
-
     def generate(self, contract: type[BaseModel], task: dict, cancel, validate=None):
+        from .llm.compact import request
+        compact = request(contract, task)
+        if compact is None:
+            return self._generate(contract, task, cancel, validate)
+        result = {}
+        def validate_authored(value):
+            authored = compact.expand(value)
+            if validate:
+                validate(authored)
+            result['value'] = authored
+        previous = getattr(self, 'generation_deadline', None)
+        self.generation_deadline = min(previous or float('inf'), time.monotonic() + self.settings.task_timeout)
+        try:
+            self._generate(compact.contract, compact.payload, cancel, validate_authored,
+                           instructions=compact.instructions, report_contract=contract, max_attempts=2)
+            return result['value']
+        finally:
+            self.generation_deadline = previous
+
+    def _generate(self, contract: type[BaseModel], task: dict, cancel, validate=None,
+                  *, instructions=None, report_contract=None, max_attempts=3):
+        report_contract = report_contract or contract
         schema = contract.model_json_schema()
+        if instructions and contract.__name__ in {'DiagramText', 'ChartText'} and not task['question_required']:
+            schema['properties']['question'] = {'type': 'null'}
+            schema.get('$defs', {}).pop('QuestionText', None)
         if contract.__name__ in {"ModelShort", "ModelStoryboard"}:
             if not task["segments"]:
                 raise AppError("INSUFFICIENT_EVIDENCE", "The YouTube transcripts have no suitable passages. Retry or use a more focused goal.",422)
@@ -170,21 +201,34 @@ class Ollama:
                 "Never broaden a narrow goal or add unsupported curriculum to fill time. Report evidence limitations honestly. "
                 "Do not invent facts, URLs, timestamps or measurements. Be concise. Prerequisites are short knowledge concepts, not equipment lists; use [] when none are needed."
             )
+        if instructions is not None:
+            messages[0]['content'] = instructions
         # Some local backends do not enforce `format`; show the schema to the
         # model as well. Never rely on constrained decoding instead of validation.
         messages[0]["content"] += (
             " Return one compact JSON object, with no markdown, commentary, or blank lines. "
             "Use properly quoted strings and [] for an empty array. Match this JSON schema: "
             + json.dumps(schema, ensure_ascii=False, separators=(",", ":"))
+            + " Your response is consumed by a strict JSON parser, not a Markdown viewer. "
+            "The first non-whitespace character must be { and the last must be }. "
+            "Never use backticks or a code fence. Return JSON on one line to keep the response compact. "
+            "Use exactly the schema's field names and allowed IDs; omit fields that are not in the schema."
         )
+        # Put the compact task-specific shape after the schema so unconstrained
+        # backends see concrete nesting/array guidance immediately before drafting.
+        messages[0]["content"] += " " + authoring_rules(contract.__name__, task)
         base_messages = messages[:]
         # Initial call and at most two repairs, with the same bounded evidence.
         last_error = ""
         output = ""
         parsed = False
         failure_kind = "validation"
-        for attempt in range(3):
+        repair_inventory = ""
+        repeated = False
+        for attempt in range(max_attempts):
             check_cancel(cancel)
+            if getattr(self, 'generation_deadline', None) is not None and time.monotonic() >= self.generation_deadline:
+                raise AppError('MODEL_TASK_TIMEOUT', 'This generation stage exceeded its time budget. Sources and ready shorts are saved; no additional automatic retries were started.', 422)
             messages = base_messages[:]
             if attempt:
                 # Do not teach the model to continue malformed JSON or whitespace
@@ -194,77 +238,173 @@ class Ollama:
                 messages.append({"role": "user", "content":
                     "The previous attempt failed: " + last_error[:1200]
                     + ". Start fresh and return a complete compact JSON object matching the schema. "
-                    "Keep all claims grounded in the supplied passages."})
-            payload = {"model": self.settings.model, "messages": messages, "format": schema, "stream": True,
-                       "think": False, "keep_alive": "10m", "options": {"temperature": 0, "seed": 42 + attempt,
-                       "num_ctx": self.settings.context, "num_predict": self.settings.predict, "repeat_penalty": 1.0}}
+                    "Keep all claims grounded in the supplied passages. " + repair_inventory})
             try:
                 output = ""
+                result = None
+                repair_inventory = ""
                 parsed = False
                 failure_kind = "output"
                 done_reason = None
-                completed = False
                 repetition_checked = 0
-                # Large transcript prompts can take well over ten seconds before the first token.
-                # Keep a bounded idle timeout and a wall-clock limit for each generation attempt.
-                deadline = time.monotonic() + 300
-                with httpx.Client(base_url=self.settings.ollama_url, trust_env=False, timeout=httpx.Timeout(120, connect=5)) as client:
-                    with client.stream("POST", "/api/chat", json=payload) as response:
-                        if not response.is_success:
-                            raise AppError("MODEL_REQUEST_FAILED", "The local model rejected the request. Check the model and Ollama version, then retry.", 503)
-                        for line in response.iter_lines():
-                            check_cancel(cancel)
-                            if time.monotonic() > deadline:
-                                raise AppError("MODEL_TIMEOUT", "The local model exceeded the generation time limit. Try a shorter lesson or another local model.", 503)
-                            if not line:
-                                continue
-                            part = json.loads(line)
-                            if part.get("error"):
-                                raise AppError("MODEL_REQUEST_FAILED", "The local model failed. Check Ollama, then retry.", 503)
-                            output += part.get("message", {}).get("content", "")
-                            if part.get("done"):
-                                completed = True
-                                done_reason = part.get("done_reason")
-                            if len(output) > 60000:
-                                raise ValueError("Model output is too large.")
-                            if len(output) - repetition_checked >= 256 or completed:
-                                repetition_checked = len(output)
-                                if re.search(r"\s{160,}|(.{3,80}?)\1{7,}", output[-2000:], re.DOTALL):
-                                    raise ValueError("Output is stuck repeating text or whitespace. Use short, distinct sentences and finish the JSON.")
-                            if completed:
-                                break
+                key_guard = JSONKeyGuard()
+                def content(text):
+                    nonlocal output, repetition_checked
+                    output += text
+                    if len(output) > 60000:
+                        raise ValueError("Model output is too large.")
+                    if len(output) - repetition_checked >= 256:
+                        repetition_checked = len(output)
+                        self.check_output(output)
+                    key_guard.feed(text)
+                attempt_started = time.perf_counter()
+                done_reason = self.complete(messages, schema, attempt, cancel, content)
+                self.check_output(output)
                 check_cancel(cancel)
-                if not completed:
-                    raise ValueError("The model stream ended before its completion marker.")
                 if done_reason == "length":
                     failure_kind = "truncated"
                     raise ValueError("The model reached its output token limit. Use shorter strings and fewer optional items to finish within the limit.")
-                value = json.loads(output)
+                value = strict_json_object(output)
                 parsed = True
                 failure_kind = "validation"
                 jsonschema.validate(value, schema)
                 result = contract.model_validate(value)
                 if validate:
                     validate(result)
+                self.record_attempt(report_contract, attempt, "success", done_reason, attempt_started)
                 return result
             except (ValueError, ValidationError, jsonschema.ValidationError) as exc:
                 if isinstance(exc, jsonschema.ValidationError):
                     path = ".".join(str(p) for p in exc.absolute_path) or "root"
                     last_error = f"{path}: {exc.message}"
+                    if exc.validator == "pattern" and "{0,19}" in str(exc.validator_value):
+                        last_error += "; use a short identifier of at most 20 characters, such as concept_0 or concept_1, and update its references consistently"
+                elif isinstance(exc, ValidationError):
+                    # Pydantic's str(exc) includes a truncated input object and URL,
+                    # which dilute actionable feedback and retain learner text.
+                    issue = exc.errors(include_input=False, include_url=False)[0]
+                    path = ".".join(str(p) for p in issue["loc"]) or "root"
+                    last_error = f"{path}: {issue['msg']}"
                 else:
                     last_error = str(exc)
+                repeated = isinstance(exc, RepeatedContent)
+                if result is not None and contract.__name__ == "ModelStoryboard":
+                    repair_inventory = storyboard_repair_inventory(result)
+                self.record_attempt(report_contract, attempt, failure_kind, done_reason, attempt_started, last_error)
                 (self.settings.data / "cache" / "model-last-error.json").write_text(json.dumps({
-                    "contract": contract.__name__, "attempt": attempt + 1, "kind": failure_kind,
-                    "done_reason": done_reason, "error": last_error, "output": output}, indent=2))
-            except httpx.HTTPError:
+                    "provider": self.provider_name, "contract": report_contract.__name__, "attempt": attempt + 1, "kind": failure_kind,
+                    "done_reason": done_reason, "error": last_error[:1200], "output": output[:10000]}, indent=2))
+            except (AppError, Cancelled) as exc:
+                self.record_attempt(report_contract, attempt, getattr(exc, "code", "cancelled"), done_reason, attempt_started)
+                raise
+            except httpx.TimeoutException:
+                self.record_attempt(report_contract, attempt, "timeout", done_reason, attempt_started)
                 check_cancel(cancel)
-                raise AppError("MODEL_TIMEOUT", "The local model did not finish. Check its available memory and retry.", 503) from None
-        stage = {"LessonPlan": "lesson plan", "ModelShort": "short", "ModelStoryboard": "storyboard", "CandidateRanking": "video ranking", "SupportCheck": "source review"}.get(contract.__name__, "response")
+                raise AppError("MODEL_TIMEOUT", f"{self.provider_name} did not finish within the HTTP timeout. Check available memory and configured timeouts.", 503) from None
+            except httpx.HTTPError:
+                self.record_attempt(report_contract, attempt, "transport", done_reason, attempt_started)
+                check_cancel(cancel)
+                raise AppError("MODEL_UNAVAILABLE", f"{self.provider_name} HTTP transport failed. Check its loopback service; no fallback was used.", 503) from None
+        stage = {"LessonPlan": "lesson plan", "ModelShort": "short", "ModelStoryboard": "storyboard", "CandidateRanking": "video ranking", "SupportCheck": "source review"}.get(report_contract.__name__, "response")
+        repairs = 'one repair' if max_attempts == 2 else 'two repairs'
         if failure_kind == "truncated":
-            raise AppError("MODEL_OUTPUT_TRUNCATED", f"The local model hit its output token limit while generating the {stage} after two repairs. Retry; if this persists, increase OLLAMA_PREDICT within the supported range.", 422)
+            raise AppError("MODEL_OUTPUT_TRUNCATED", f"The local model hit its output token limit while generating the {stage} after {repairs}. Retry; if this persists, increase {self.output_setting} within the supported range.", 422)
         if failure_kind == "output":
-            raise AppError("MODEL_OUTPUT_INVALID", f"The local model could not finish valid JSON for the {stage} after two repairs. Retry. This is a model output failure, not a lack of source evidence.", 422)
-        raise AppError("MODEL_DATA_INVALID", f"The local model's {stage} failed validation after two repairs: {last_error[:300]}. Retry to regenerate this stage; ready shorts are preserved.", 422)
+            raise AppError("MODEL_OUTPUT_INVALID", f"The local model could not finish valid JSON for the {stage} after {repairs}. Preparation has stopped; this is not a lack of source evidence.", 422)
+        if failure_kind == "validation" and repeated:
+            # The final draft was otherwise checked up to the point where it
+            # repeated published material. Jobs may skip this outcome.
+            raise AppError("NO_NEW_CONTENT", f"The sources had nothing new to add for this {stage}; it only repeated earlier shorts after {repairs}.", 422)
+        raise AppError("MODEL_DATA_INVALID", f"The local model's {stage} failed validation after {repairs}: {last_error[:300]}. Retry to regenerate this stage; ready shorts are preserved.", 422)
+
+    @staticmethod
+    def check_output(output):
+        if re.search(r"\s{160,}|(.{3,80}?)\1{7,}", output[-2000:], re.DOTALL):
+            raise ValueError("Output is stuck repeating text or whitespace. Use short, distinct sentences and finish the JSON.")
+
+    def record_attempt(self, contract, attempt, kind, reason, started, error=None):
+        row = {"provider": self.provider_name, "task": contract.__name__, "attempt": attempt + 1,
+               "kind": kind, "finish_reason": reason, "seconds": time.perf_counter() - started,
+               **getattr(self, "transport_metrics", {})}
+        if error:
+            row["error"] = error[:500]  # Local bounded diagnostics, never public telemetry.
+        self.attempts = (getattr(self, "attempts", []) + [row])[-100:]
+
+
+class Ollama(GenerationService):
+    def __init__(self, settings):
+        super().__init__(settings)
+        # Report the knob which actually won configuration precedence.
+        import os
+        if os.getenv("LLM_MAX_OUTPUT_TOKENS"):
+            self.output_setting = "LLM_MAX_OUTPUT_TOKENS"
+
+    def readiness(self):
+        try:
+            with httpx.Client(base_url=self.settings.ollama_url, timeout=5, trust_env=False) as client:
+                tags = client.get("/api/tags")
+                tags.raise_for_status()
+                model = next((m for m in tags.json().get("models", []) if m["name"] == self.settings.model or m["name"] == self.settings.model + ":latest"), None)
+                if not model:
+                    raise AppError("MODEL_MISSING", f"Install the local model with: ollama pull {self.settings.model}", 503)
+                info = client.post("/api/show", json={"model": self.settings.model})
+                info.raise_for_status()
+                self.details = info.json()
+                if self.details.get("remote_model") or self.details.get("remote_host") or model.get("remote_host") or "cloud" in model["name"].lower():
+                    raise AppError("REMOTE_MODEL_REJECTED", "This model uses a remote service. Select an installed local model.", 503)
+                self.digest = model["digest"]
+                return self.digest
+        except (KeyError, TypeError, ValueError):
+            raise AppError("MODEL_IDENTITY_INVALID", "Ollama returned invalid local model metadata.", 503) from None
+        except httpx.HTTPError:
+            raise AppError("OLLAMA_UNAVAILABLE", "Ollama is unavailable. Start Ollama on loopback, then retry.", 503) from None
+
+    def fingerprint(self):
+        self.readiness()
+        return {"provider": "ollama", "adapter_version": "ollama-ndjson-1", "model": self.settings.model,
+                "digest": self.digest, "context": self.settings.context,
+                "num_predict": self.settings.predict, "temperature": 0, "seed": 42, "retry_seeds": [43, 44],
+                "repeat_penalty": 1.0, "think": False,
+                "prompt_version": PROMPT_VERSION, "schema_version": SCHEMA_VERSION,
+                "parser_version": "strict-json-3-container-guard", "repair_policy_version": "compact-two-attempts-v1", "authoring_version": "compact-1",
+                "quantization": self.details.get("details", {}).get("quantization_level")}
+
+    def complete(self, messages, schema, attempt, cancel, content):
+        payload = {"model": self.settings.model, "messages": messages, "format": schema, "stream": True,
+                   "think": False, "keep_alive": "10m", "options": {"temperature": 0, "seed": 42 + attempt,
+                   "num_ctx": self.settings.context, "num_predict": self.settings.predict, "repeat_penalty": 1.0}}
+        started = time.monotonic()
+        deadline = min(started + self.settings.attempt_timeout,
+                       getattr(self, 'generation_deadline', None) or float('inf'),
+                       getattr(cancel, 'deadline', None) or float('inf'))
+        with httpx.Client(base_url=self.settings.ollama_url, trust_env=False,
+                          timeout=httpx.Timeout(min(self.settings.read_timeout, max(.1, deadline - started)), connect=self.settings.connect_timeout)) as client:
+            with client.stream("POST", "/api/chat", json=payload) as response:
+                if not response.is_success:
+                    raise AppError("MODEL_REQUEST_FAILED", "Ollama rejected the request. Check the installed model and Ollama version.", 503)
+                for line in response.iter_lines():
+                    check_cancel(cancel)
+                    if time.monotonic() > deadline:
+                        raise AppError("MODEL_TIMEOUT", "Ollama exceeded the generation time limit.", 503)
+                    if not line:
+                        continue
+                    if len(line) > 65536:
+                        raise ValueError("Model stream frame is too large.")
+                    part = json.loads(line)
+                    if part.get("error"):
+                        raise AppError("MODEL_REQUEST_FAILED", "Ollama failed the request. Check its local service.", 503)
+                    content(part.get("message", {}).get("content", ""))
+                    if part.get("done"):
+                        return part.get("done_reason")
+        raise ValueError("The model stream ended before its completion marker.")
+
+
+def create_model(settings):
+    if settings.provider == "ollama":
+        return Ollama(settings)
+    from .llm.turbofieldfare import TurboFieldfare
+    return TurboFieldfare(settings)
+
 
 class Speech:
     def __init__(self, settings):
@@ -398,7 +538,7 @@ class Speech:
 
 
 def health(model, speech):
-    message = "Local providers are ready."
+    message = f"{getattr(model, 'provider_name', 'Local model')} / {model.settings.model} is ready."
     ok = True
     try:
         model.readiness()
@@ -411,5 +551,6 @@ def health(model, speech):
     if speech.settings.speech == "macos":
         message += " Development voice: macOS system speech. Kokoro is not selected."
     return ProviderHealth(ready=ok and speech_ready, model_ready=ok, speech_ready=speech_ready,
-                          model=model.settings.model, digest=model.digest, speech_provider=speech.settings.speech,
+                          model=model.settings.model, digest=getattr(model, "digest", None),
+                          provider=getattr(model, "provider_name", "unknown"), speech_provider=speech.settings.speech,
                           voice=speech.actual_voice, message=message)

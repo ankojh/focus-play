@@ -37,8 +37,10 @@ def test_new_lesson_automatically_searches_and_all_content_has_youtube_evidence(
                 assert short['question']['evidence']['source_id'] in source_ids
         stages=[body['stage'] for _,body in app.state.store.events(lid,0)]
         assert 'Searching YouTube' in stages and 'Reading video transcripts' in stages
+        searches=len(provider.searches)
         assert client.post('/api/lessons',json=request).json()['id']==lid
-        assert len(provider.searches)==1
+        # Re-sending the same request reuses the lesson: no new search.
+        assert len(provider.searches)==searches
 
 
 @pytest.mark.parametrize('legacy',[{'source_mode':'import'},{'source_mode':'youtube'},{'source_ids':['sample']},{'source_ids':[]}])
@@ -228,7 +230,8 @@ def test_ranking_failure_keeps_youtube_order(tmp_path):
     with TestClient(create_app(settings,NoRanking(),StubSpeech(settings),provider)) as client:
         lid=client.post('/api/lessons',json=request_for(None)).json()['id']
         ready=wait_for(client,lid)
-        assert [s['video_id'] for s in ready['sources']]==['video000000','video000001','video000002']
+        # First search keeps YouTube order; a short lesson may add a second search's videos after them.
+        assert [s['video_id'] for s in ready['sources']][:3]==['video000000','video000001','video000002']
         assert ready['video_rankings']==[]
 
 

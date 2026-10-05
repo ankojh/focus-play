@@ -40,7 +40,7 @@ def validate_plan(plan, segments, max_shorts, budget_ms, *, calibrated=False, pr
         if not objective.learning_outcome or not objective.relevance or not objective.visual_intent:
             raise ValueError("Supply an observable learning_outcome, learner relevance and visual intent.")
         # An observable action is required; this is a structural guard, not a quality score.
-        verbs = {"explain", "identify", "compare", "predict", "choose", "apply", "trace", "describe", "distinguish", "demonstrate", "recall", "calculate", "justify", "perform", "use", "recognize", "evaluate", "construct", "write", "select"}
+        verbs = {"explain", "identify", "compare", "predict", "choose", "apply", "trace", "describe", "distinguish", "demonstrate", "recall", "calculate", "justify", "perform", "use", "recognize", "evaluate", "construct", "write", "select", "summarize", "summarise", "recap"}
         if not verbs.intersection(re.findall(r"[a-z]+", objective.learning_outcome.lower())):
             raise ValueError("Learning outcomes must name an observable action, e.g. explain, predict or choose.")
         if len(set(objective.dependency_ids)) != len(objective.dependency_ids) or any(dep not in earlier for dep in objective.dependency_ids):
