@@ -41,6 +41,25 @@ QUERY_STOP = set("a an the and or of to in on for with about how what why is are
                  "learning understand help know basics beginner beginners guide tutorial explain explained".split())
 
 
+NUMBER_WORDS = {w: i for i, w in enumerate("zero one two three four five six seven eight nine ten".split())}
+COUNT = r"(\d+|" + "|".join(NUMBER_WORDS) + r")"
+# Real failure: a plan titled "The 5-Step Caltrain Journey" became a 4-card short.
+# Announced counts must match the number of items the short actually shows.
+TITLE_COUNT = re.compile(COUNT + r"-(step|stage|phase|part|point)\s+", re.I)
+TITLE_NUMBER = re.compile(COUNT + r"\s+(?=(steps|stages|phases|ways|tips|reasons|rules|keys|things|parts)\b)", re.I)
+NARRATION_COUNT = re.compile(COUNT + r"[- ](?:key |main |simple |basic )?(step|stage|phase)s?\b", re.I)
+
+
+def drop_counts(title):
+    """'The 5-Step Caltrain Journey' -> 'The Caltrain Journey'; '3 Ways to Save' -> 'Ways to Save'."""
+    cleaned = " ".join(TITLE_NUMBER.sub("", TITLE_COUNT.sub("", title)).split())
+    return cleaned[:1].upper() + cleaned[1:] if len(cleaned) >= 5 else title
+
+
+def count_value(word):
+    return int(word) if word.isdigit() else NUMBER_WORDS[word.lower()]
+
+
 def stem(word):
     # Crude but symmetric, so "indexes"/"index" and "skates"/"skate" match.
     if len(word) > 3 and word.endswith("s"):
@@ -72,7 +91,7 @@ class BeatText(Contract):
 
 
 class DiagramText(Contract):
-    beats: list[BeatText] = Field(min_length=2, max_length=4)
+    beats: list[BeatText] = Field(min_length=2, max_length=8)
     question: QuestionText | None
 
 
@@ -85,7 +104,7 @@ class ChartBeat(Contract):
 
 class ChartText(Contract):
     units: str = Field(min_length=1, max_length=40)
-    beats: list[ChartBeat] = Field(min_length=2, max_length=4)
+    beats: list[ChartBeat] = Field(min_length=2, max_length=8)
     question: QuestionText | None
 
 
@@ -167,7 +186,7 @@ def request(contract, task):
             def template_for(item):
                 # No numbers in the cited passage means nothing real to chart.
                 return 'comparison' if item.template == 'chart' and not chartable([segments[item.source]['text']]) else item.template
-            objectives = [Objective(concept_id=f'{prefix}{i}', title=item.title,
+            objectives = [Objective(concept_id=f'{prefix}{i}', title=drop_counts(item.title),
                 learning_outcome=item.outcome, teaching_role=item.role, dependency_ids=dependencies(item, i), template=template_for(item),
                 relevance=item.outcome, visual_intent=f'Use {template_for(item)} to explain this outcome.',
                 evidence_segment_ids=[source_id(item.source)],
@@ -204,13 +223,22 @@ def request(contract, task):
             'Return supported=false and items=[] if unsupported; if extensions are exhausted return items=[] with a reason. '
             'A checkpoint reserves 20 seconds, so use sparingly. Code will allocate 15–30 seconds per clip. '
             'Templates: key_fact=rule plus supports; process/steps/example/timeline=ordered stages; '
-            'comparison=options; cycle=repeating stages; dos_donts=good versus bad; chart=source numbers with units. '
+            'comparison=options; cycle=repeating stages; dos_donts=good versus bad; chart=source numbers with units; '
+            'funnel=stages that narrow (many to few); matrix=four cases split by two factors (2x2); '
+            'hierarchy=a whole and its parts (organisation, category, system); venn=two ideas and what they share. '
+            'Vary templates across items when the content fits; do not default to process or key_fact. '
+            'Titles name the idea, never a count (no "5-Step …" or "Three Ways …"). A short can show 2 to 8 items; '
+            'if a source process has more than 8 steps, split it into two outcomes. '
             'Keep reason brief. Root shape: {"supported":true,"reason":"Brief reason","items":[],"more_sources_query":""}. '
             'Put outcome objects INSIDE items, close each object once and the array once.', expand_plan)
 
     if name == 'ModelStoryboard':
         template = task.get('template', 'key_fact')
         chart = template == 'chart'
+        # Layouts with a fixed shape; the wrong beat count falls back to a close
+        # general layout instead of failing an otherwise good short.
+        shaped = {'funnel': (3, 8, 'process'), 'matrix': (4, 4, 'comparison'),
+                  'hierarchy': (3, 8, 'key_fact'), 'venn': (3, 3, 'comparison')}
         wire = ChartText if chart else DiagramText
         teaching = task.get('teaching') or {}
         objective = task['objective']
@@ -231,15 +259,20 @@ def request(contract, task):
                     distractors=q.distractors, explanation=q.explanation, segment_id=source_id(q.source))
             beats, connections = [], []
             count = len(value.beats)
+            layout = template
+            if layout in shaped and not shaped[layout][0] <= count <= shaped[layout][1]:
+                layout = shaped[layout][2]
             if not chart:
-                if template == 'cycle' and count < 3:
+                if layout == 'cycle' and count < 3:
                     raise ValueError('A cycle needs at least 3 beats/stages.')
-                if template in {'process', 'steps', 'example', 'timeline', 'cycle'}:
+                if layout in {'process', 'steps', 'example', 'timeline', 'cycle', 'hierarchy'}:
                     pairs = [(i, i + 1) for i in range(count - 1)]
-                    if template == 'cycle':
+                    if layout == 'cycle':
                         pairs.append((count - 1, 0))
+                    if layout == 'hierarchy':
+                        pairs = [(0, i) for i in range(1, count)]
                     connections = [{'id': f'conn_{i}', 'source': f'node_{a}', 'target': f'node_{b}'} for i, (a, b) in enumerate(pairs)]
-                scene = {'id': 'scene_0', 'kind': 'diagram', 'summary': objective, 'template': template,
+                scene = {'id': 'scene_0', 'kind': 'diagram', 'summary': objective, 'template': layout,
                     'states': [], 'connections': connections,
                     'nodes': [{'id': f'node_{i}', 'slot': i, 'label': b.label, 'detail': b.detail,
                                'role': b.role, 'icon': b.icon} for i, b in enumerate(value.beats)]}
@@ -258,13 +291,18 @@ def request(contract, task):
                               'text': b.text, 'segment_id': source_id(b.source), 'operations': operations})
             result = ModelStoryboard(storyboard_version=2, objective=objective, prerequisites=[],
                                      narration_units=beats, scenes=[scene], question=question)
+            for b in value.beats:
+                match = NARRATION_COUNT.search(b.text)
+                if match and count_value(match.group(1)) != count:
+                    raise ValueError(f'Narration says "{match.group(0)}" but this short shows {count} items. '
+                                     f'Either cover exactly {count} without announcing another total, or remove the count.')
             words = sum(len(b.text.split()) for b in value.beats)
             if words < min_words and not length_repair['used']:
                 # One request for a fuller draft; a still-short draft is then accepted.
                 length_repair['used'] = True
                 raise TooShort(f'Narration has {words} words; this short needs about {target_words} (at least {min_words}). '
-                               f'Keep the same points but explain each more fully: 3 or 4 beats of about {per_beat} words, '
-                               'each stating the point and then why or how with a concrete detail from the passages. '
+                               f'Keep the same points and story but tell each beat more fully, '
+                               'each moving the story forward with why or how and a concrete detail from the passages. '
                                'No filler, no repeating earlier shorts.')
             return result
         return Request(wire, {
@@ -274,20 +312,33 @@ def request(contract, task):
             'example': teaching.get('example'), 'history': teaching.get('history'),
             'earlier_questions': task.get('earlier_questions', []), 'sources': sources,
         }, RULES +
-            f'Teach ONE outcome in 3 or 4 narration beats totalling about {target_words} words (at least {min_words}). '
-            f'Each beat is one or two full sentences of about {per_beat} words: state the point, then explain why or how '
-            'with a concrete detail, condition or example from the passages. '
+            f'Teach ONE outcome in narration beats totalling about {target_words} words (at least {min_words}). '
+            'Use one beat per item the content really has, from 2 to 8: if the passages describe 5 steps, use 5 beats; '
+            'never pad to or cut down to a fixed number. '
+            f'Each beat is one or two full sentences (about {per_beat} words with 3 beats; shorter when there are more beats). '
+            'Tell it as a short story with an arc: beat 1 sets up a real situation, problem or question from the passages that makes '
+            'the learner curious; the middle beats show what happens and why, each moving the story forward with a concrete detail, '
+            'cause and effect, or a surprising turn; the last beat resolves it with the takeaway. '
+            'Link beats with varied, natural transitions that fit this content, and speak to you in plain, vivid words. '
+            'Do not reuse stock transition phrases: no two beats, and no beat in history, should open the same way. '
+            'Never announce a number of steps, stages or phases unless it equals the number of beats; if the passages list more, '
+            'cover the most important ones without announcing a total. '
+            'The story may only use situations, people, companies, examples and facts found in the passages: never invent characters, '
+            'anecdotes, numbers or hypothetical scenarios. Never use I, we, us or our. '
+            'To connect with an earlier short from history, name that idea directly instead of saying "as mentioned". '
             'Every beat introduces one visual item with a short label and explains it in its text. '
             'The application reveals/focuses that item when its narration starts; do NOT output IDs, operations or timestamps. '
             'Use your own clear teaching words, no filler, no repeated explanation. Preserve supplied example entities. '
-            'End with a useful takeaway/condition, not generic praise. For an explicit recap, revisit its dependencies meaningfully. '
+            'Resolve the story with a useful takeaway/condition, not generic praise. For an explicit recap, revisit its dependencies meaningfully. '
             'question must be null unless required; if required test the taught outcome with one correct answer and plausible distractors. '
             + ('Use only actual source values and their correct labels; units must be stated in the passages. '
                'Output units, beats (text/source/label/value) and question. '
                if chart else
                'Every beat has text, source, label, detail (3–8 words), role and icon. '
-               'For process/steps/example/timeline the items form a chain; for cycle they loop (3–4 items). '
-               'For comparison/key_fact/dos_donts there are no arrows. key_fact starts with the main rule; the remaining beats support it. '
+               'For process/steps/example/timeline the items form a chain; for cycle they loop (3 to 8 items). '
+               'For comparison/key_fact/dos_donts/funnel/matrix/venn there are no arrows. key_fact starts with the main rule; the remaining beats support it. '
+               'funnel: 3 to 8 stages, widest first. matrix: exactly 4 beats, the four cases of two factors (top-left, top-right, bottom-left, bottom-right). '
+               'hierarchy: beat 1 is the whole, the remaining beats are its parts. venn: exactly 3 beats, two ideas then what they share. '
                'For dos_donts include role good and bad. Use neutral unless a more specific role is meaningful. '
                'Output beats and question only. ')
             + 'Keep brackets balanced: each beat closes with }, beats closes with ], and question is a sibling inside the root object.',
@@ -308,6 +359,9 @@ def request(contract, task):
             RULES + 'Review factual support against each beat\'s cited passage and the learning outcome. '
             'Check narration, all visual text/data, connections, and any question/answer. '
             'Reject invented facts/examples, unsupported guarantees, wrong numerical associations, or ambiguous answers. '
+            'Storytelling framing, questions and transitions are fine when every situation and fact comes from the passages; '
+            'reject invented characters, anecdotes or hypothetical scenarios. '
+            'List as a teaching issue any announced count of steps or items that differs from the number of visual items. '
             'Paraphrasing is allowed. supported/reason describe factual support; teaching_issues lists concrete instructional failures '
             '(wrong level/outcome, unrelated visual, duplicate claims, lost example continuity). '
             'An explicit recap may repeat dependencies. Do not require a short to teach a whole course. '

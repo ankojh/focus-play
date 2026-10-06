@@ -1,0 +1,77 @@
+/* Light, playful slide theme for the 9:16 player only; the surrounding app stays dark.
+   Loaded last, so it overrides the dark visual variables inside .player. */
+.player{
+  --ink:#2b2d42;--coral:#ff5d73;
+  --visual-background:transparent;--visual-surface:#fff;--visual-selected:#fff3e0;
+  --visual-separator:#2b2d42;--visual-text:#2b2d42;--visual-support:#5c6178;--visual-focus:#ff7a59;
+  background:linear-gradient(160deg,#fff7e8 0%,#fdeefe 50%,#e6f4ff 100%);
+  border:2.5px solid var(--ink);color:var(--ink)
+}
+
+/* Slow-floating pastel shapes behind the slide. */
+.player-decor{position:absolute;inset:0;z-index:-1;overflow:hidden;border-radius:inherit;pointer-events:none}
+.player-decor span{position:absolute;aspect-ratio:1;border-radius:50%;opacity:.6;animation:decor-float 14s ease-in-out infinite alternate}
+.player-decor span:nth-child(1){width:44%;background:#ffd6e0;top:-9%;right:-12%}
+.player-decor span:nth-child(2){width:32%;background:#c9f2e7;bottom:14%;left:-10%;animation-duration:18s}
+.player-decor span:nth-child(3){width:16%;background:#ffe9a8;top:40%;right:5%;border-radius:32%;animation-duration:11s}
+@keyframes decor-float{to{transform:translate(12px,-18px) rotate(16deg)}}
+
+/* Top bar, title and kicker. */
+.player .player-top button{background:#ffffffc0;color:var(--ink);border:2px solid var(--ink)}
+.player .player-top button:hover{background:#fff}
+.player .player-type,.player .control-row,.player .player-bottom div>span,.player .cover-credit{color:var(--visual-support)}
+.player h2,.player .player-kicker{font-family:"Arial Rounded MT Bold",ui-rounded,"Nunito",system-ui,sans-serif}
+.player h2{color:var(--ink);text-shadow:none}
+.player .player-kicker{color:var(--coral)}
+.player .beat-progress span{background:#2b2d4222}
+.player .beat-progress i{background:var(--coral)}
+.player .captions{background:#fff;border:2px solid var(--ink);color:var(--ink)}
+.player .time-readout{color:var(--ink)}
+.player .time-readout span{color:var(--visual-support)}
+.player .controls input[type=range]{background-image:linear-gradient(to right,var(--accent) 0,var(--accent) var(--played),#d9d3e6 var(--played),#d9d3e6 100%)}
+
+/* Diagram: white cards with chunky outlines and a cartoon offset shadow. */
+.player .node-card{fill:#fff;stroke:var(--ink);stroke-width:2.5px}
+.player [data-focused=true] .node-card{fill:#fff6e5;stroke:#ff7a59;stroke-width:3.5px;animation:focus-glow-light 1.6s ease-in-out infinite alternate}
+@keyframes focus-glow-light{from{filter:drop-shadow(0 0 1px #ff7a5940)}to{filter:drop-shadow(0 0 9px #ff7a59a0)}}
+.player .node-shadow{fill:var(--ink)}
+.player .icon-blob{fill-opacity:.18}
+.player .venn-set{stroke-width:2.5px}
+.player .diagram-link{stroke:var(--ink);stroke-width:2.5px;stroke-linecap:round}
+.player .diagram-arrowhead{fill:var(--ink)}
+.player .diagram-guide,.player .diagram-guide line{stroke:#9a98b5}
+
+/* Springier motion: cards bounce in, and bounce again when they become the focus. */
+.player .node-pop{animation:pop-spring .6s cubic-bezier(.34,1.56,.64,1) backwards}
+@keyframes pop-spring{from{transform:scale(.55) rotate(-4deg);opacity:0}}
+.player [data-focused=true]>.node-pop{animation:focus-bounce .55s cubic-bezier(.34,1.56,.64,1)}
+@keyframes focus-bounce{40%{transform:scale(1.06) rotate(1deg)}}
+.player .diagram-frame,.player .data-visual{animation-timing-function:cubic-bezier(.34,1.4,.64,1)}
+
+/* Table, code and chart slides on light paper. */
+.player .data-visual{background:#fffffff2;border:2.5px solid var(--ink);box-shadow:4px 4px 0 var(--ink);color:var(--ink)}
+.player .data-visual [data-focused=true]{background-color:#fff3e0;outline-color:#ff7a59}
+.player .table-scroll th{background:#efe9ff;color:var(--ink)}
+.player .table-scroll td,.player .table-scroll th{border-color:#d9d3e6}
+.player .table-scroll caption,.player .image-visual details{color:var(--visual-support)}
+.player .code-visual pre{background:#f6f2ea;color:var(--ink)}
+.player .chart-track{background:#efe9ff}
+.player .chart-axis{border-color:#9a98b5}
+.player .chart-zero{border-color:var(--ink)}
+.player .chart-zero-value{background:var(--ink)}
+
+/* Cover: a tilted polaroid during the intro that shrinks into a round sticker in the top bar.
+   Both states share one transform list so the change animates smoothly. */
+.cover-photo{position:absolute;z-index:2;margin:0;pointer-events:none;background:#fff;border:2.5px solid var(--ink);box-shadow:5px 5px 0 var(--ink);
+  transition:top .75s,left .75s,width .75s,padding .75s,border-radius .75s,transform .75s,box-shadow .75s;transition-timing-function:cubic-bezier(.34,1.3,.5,1)}
+.cover-frame{display:block;aspect-ratio:4/5;overflow:hidden;border-radius:3px;transition:border-radius .75s,aspect-ratio .75s}
+.cover-frame img{display:block;width:100%;height:100%;object-fit:cover;transform-origin:center}
+.cover-photo figcaption{position:absolute;left:0;right:0;bottom:5px;padding:0 10px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  font:15px "Marker Felt","Chalkboard SE","Comic Sans MS",cursive;color:var(--ink);transition:opacity .3s}
+.cover-photo.polaroid{top:52%;left:50%;width:58%;padding:8px 8px 30px;border-radius:6px;transform:translate(-50%,-50%) rotate(-4deg)}
+.cover-photo.sticker{top:11px;left:50%;width:42px;padding:2px;border-radius:50%;box-shadow:2px 2px 0 var(--ink);transform:translate(-50%,0) rotate(0deg)}
+.cover-photo.sticker .cover-frame{aspect-ratio:1;border-radius:50%}
+.cover-photo.sticker figcaption{opacity:0}
+/* The layout tag reads as a small heading above the first card. */
+.player .diagram-tag{fill:var(--coral);font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+.player .diagram-frame{padding-bottom:6px}

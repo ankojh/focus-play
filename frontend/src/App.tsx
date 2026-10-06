@@ -54,6 +54,19 @@ export function App() {
     const signature=JSON.stringify(body);if(creationRequest.current?.signature!==signature)creationRequest.current={id:crypto.randomUUID(),signature};
     try{const next=await api<Lesson>('/lessons',{...body,request_id:creationRequest.current!.id});apply(next);setAutoplay(true);setActiveShort('');setEpoch(n=>n+1);creationRequest.current=null;}
     catch(e){setError(message(e));}finally{setBusy(false);}};
+  // Generation runs on the server and survives closed tabs, so stopping is offered app-wide.
+  const generating=[lesson,...history.filter(l=>l.id!==lesson?.id)].filter((l):l is Lesson=>!!l && isGenerating(l));
+  useEffect(()=>{
+    if(!history.some(l=>l.id!==lid && isGenerating(l)))return;
+    const timer=setInterval(()=>void api<Lesson[]>('/lessons').then(setHistory).catch(()=>{}),10000);
+    return()=>clearInterval(timer);
+  },[history,lid]);
+  const stopGenerating=async()=>{setBusy(true);setError('');try{
+    // Re-read first: cancelling a lesson that already failed would relabel it.
+    const fresh=await api<Lesson[]>('/lessons');
+    for(const l of fresh.filter(isGenerating)){const stopped=await api<Lesson>(`/lessons/${l.id}/cancel`,{});if(stopped.id===lessonRef.current?.id)apply(stopped);}
+    setHistory(await api<Lesson[]>('/lessons'));setEpoch(n=>n+1);void refreshHealth();
+  }catch(e){setError(message(e));}finally{setBusy(false);}};
   const action=async(kind:'cancel'|'retry')=>{if(!lesson)return;setBusy(true);setError('');try{apply(await api<Lesson>(`/lessons/${lesson.id}/${kind}`,{}));setEpoch(n=>n+1);void refreshHealth();}catch(e){setError(message(e));}finally{setBusy(false);}};
   const readyCount=lesson?.shorts.filter(s=>mediaReady(lesson,s)).length??0;
   const short=lesson?.shorts.find(s=>s.id===activeShort)??lesson?.shorts[0];
@@ -70,7 +83,7 @@ export function App() {
 
   return <div className="app-shell">
     <aside className="sidebar"><nav aria-label="Main navigation"><button aria-label="Learn Shorts" className={tab==='learn'?'nav-active':''} onClick={()=>setTab('learn')}><Clapperboard size={23}/><span>Shorts</span></button><button className={tab==='library'?'nav-active':''} onClick={openLibrary}><Library size={23}/><span>Library</span></button></nav></aside>
-    <div className="main-shell"><header className="topbar"><a className="brand" href="/" onClick={e=>{e.preventDefault();newLesson();}}><span className="brand-mark"><PlayMark/></span><span>Focus<span className="brand-light">Play</span></span></a><button className="header-search" onClick={newLesson}><span>What do you want to learn?</span><span className="search-end"><Search size={20}/></span></button><div className="topbar-right"><button className="header-create" onClick={newLesson}><Plus size={20}/> Create</button><span className="avatar">A</span></div></header>
+    <div className="main-shell"><header className="topbar"><a className="brand" href="/" onClick={e=>{e.preventDefault();newLesson();}}><span className="brand-mark"><PlayMark/></span><span>Focus<span className="brand-light">Play</span></span></a><button className="header-search" onClick={newLesson}><span>What do you want to learn?</span><span className="search-end"><Search size={20}/></span></button><div className="topbar-right">{generating.length>0 && <button className="header-stop" disabled={busy} onClick={()=>void stopGenerating()} title="Ready shorts are kept. Use Retry later to continue."><Square size={14} fill="currentColor"/> Stop generating{generating.length>1?` (${generating.length})`:''}</button>}<button className="header-create" onClick={newLesson}><Plus size={20}/> Create</button><span className="avatar">A</span></div></header>
     <main>
     {error && <div className="error global-error" role="alert"><span>{error}</span><button aria-label="Dismiss error" onClick={()=>setError('')}><X size={17}/></button></div>}
     {tab==='library'?<div className="library-page">{libraryContent}</div>:
@@ -87,6 +100,7 @@ export function App() {
     </main></div>
   </div>;
 }
+function isGenerating(l:Lesson){return ['queued','running'].includes(l.job.status);}
 function message(e:unknown){return e instanceof Error?e.message:'The request failed. Check the local server, then retry.';}
 function uniqueEvidence(refs:Evidence[]){return refs.filter((r,i)=>refs.findIndex(x=>x.source_id===r.source_id && x.quote===r.quote)===i);}
 function timestampUrl(url:string,ms?:number|null){return ms==null?url:`${url}${url.includes('?')?'&':'?'}t=${Math.floor(ms/1000)}s`;}

@@ -312,6 +312,7 @@
   "status": "ready",
   "error": null,
   "optional": false,
+  "cover": null,
   "question_required": false,
   "cache_hit": false,
   "provider_settings": {},

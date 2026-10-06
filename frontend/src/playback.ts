@@ -1,5 +1,6 @@
 import type { Scene, Short } from './api';
 import { visualError } from './visualState';
+import { FIXED_LAYOUTS } from './diagramLayout';
 
 // Absolute audio clock, half-open interior intervals, held final frame.
 export function atTime<T extends {start_ms:number;end_ms:number}>(items:T[], time:number, duration:number):T|undefined {
@@ -12,7 +13,7 @@ export function timelineError(short:Short):string|null {
   if(short.scenes.some(s=>s.kind && s.kind!=='diagram' && visualError(s)))return 'This short has invalid visual data. Retry lesson preparation.';
   if(short.storyboard_version!==2)return short.scenes.length?null:'This saved short has no visual scene. Retry lesson preparation.';
   const fail='This short has invalid storyboard timing. Retry lesson preparation to repair it.';
-  if(!short.timeline_compiler_version || !short.audio_path || short.measured_duration_ms<1000 || short.measured_duration_ms>40000 || short.narration_units.length<2 || short.narration_units.length>5 || !short.scenes.length || short.scenes.length>3)return fail;
+  if(!short.timeline_compiler_version || !short.audio_path || short.measured_duration_ms<1000 || short.measured_duration_ms>40000 || short.narration_units.length<2 || short.narration_units.length>8 || !short.scenes.length || short.scenes.length>3)return fail;
   const beats=new Map(short.narration_units.map(u=>[u.beat_id,u]));
   if(beats.has(null) || beats.has(undefined) || beats.has('') || beats.size!==short.narration_units.length || short.narration_units.some(u=>!u.purpose || u.purpose.length<5))return fail;
   let cursor=0;
@@ -28,10 +29,10 @@ export function timelineError(short:Short):string|null {
       if(visualError(s) || s.actions.some(a=>{const beat=beats.get(a.beat_id);return !beat || beat.scene_id!==s.id || a.at_ms!==beat.start_ms;}) || bound.some(u=>!s.actions.some(a=>a.beat_id===u.beat_id)))return fail;
       covered.push(...s.beat_ids!);cursor=s.end_ms;continue;
     }
-    if(s.nodes.length<2 || s.nodes.length>4)return fail;
+    if(s.nodes.length<2 || s.nodes.length>8)return fail;
     const nodes=new Set(s.nodes.map(n=>n.id)),edges=new Map(s.connections.map(e=>[e.id,e]));
     if(nodes.size!==s.nodes.length || edges.size!==s.connections.length || s.connections.some(e=>!nodes.has(e.source)||!nodes.has(e.target)||nodes.has(e.id)))return fail;
-    if(new Set(s.nodes.map(n=>n.slot)).size!==s.nodes.length || s.nodes.some(n=>n.slot<0 || n.slot>3))return fail;
+    if(new Set(s.nodes.map(n=>n.slot)).size!==s.nodes.length || s.nodes.some(n=>n.slot<0 || n.slot>7))return fail;
     const visible=new Set<string>(),drawn=new Set<string>();
     const slots=new Map(s.nodes.map(n=>[n.id,n.slot]));
     let previous=s.start_ms;
@@ -44,7 +45,7 @@ export function timelineError(short:Short):string|null {
       else if(a.kind==='draw'){const edge=edges.get(a.target)!;if(drawn.has(a.target) || !visible.has(edge.source) || !visible.has(edge.target) || s.template==='dos_donts')return fail;drawn.add(a.target);}
       else {if(!visible.has(a.target))return fail;if(a.kind==='disappear')visible.delete(a.target);}
       if(a.kind==='move'){
-        if(a.to_slot==null || a.to_slot<0 || a.to_slot>3 || ['cycle','dos_donts','key_fact'].includes(s.template) || [...slots.values()].includes(a.to_slot))return fail;
+        if(a.to_slot==null || a.to_slot<0 || a.to_slot>7 || FIXED_LAYOUTS.has(s.template) || [...slots.values()].includes(a.to_slot))return fail;
         slots.set(a.target,a.to_slot);
       }
       previous=a.at_ms;

@@ -19,3 +19,38 @@
 .rating .stars button{background:none;border:0;padding:4px;color:#f5c518;cursor:pointer}
 .source-fallback{display:grid;gap:8px;margin-top:18px;text-align:left}
 .source-fallback a{display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+/* Cover photo: full-bleed behind the player, panned/zoomed by playback progress. */
+.player{isolation:isolate}
+.player .diagram-frame,.player .data-visual{transition:opacity .7s ease;animation:scene-in .55s cubic-bezier(.2,.7,.2,1) backwards}
+.player.intro .diagram-frame,.player.intro .data-visual{opacity:0}
+@keyframes scene-in{from{opacity:0;transform:translateY(14px) scale(.98)}}
+.cover-credit{font-size:8px;color:#bbb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cover-credit a{color:inherit}
+/* Phrase captions rise in; cards pop in and the focused card glows. */
+.caption-phrase{display:inline-block;animation:caption-in .35s ease-out both}
+@keyframes caption-in{from{opacity:0;transform:translateY(8px)}}
+.node-pop{animation:node-pop .45s cubic-bezier(.2,.8,.2,1.15) both;transform-box:fill-box;transform-origin:center}
+@keyframes node-pop{from{transform:scale(.86)}}
+[data-focused=true] .node-card{animation:focus-glow 1.6s ease-in-out infinite alternate}
+@keyframes focus-glow{from{filter:drop-shadow(0 0 2px #ffbf6640)}to{filter:drop-shadow(0 0 12px #ffbf66a0)}}
+.header-stop{border:1px solid #ff6b6b;background:#3a1717;color:#ffd6d6;border-radius:18px;padding:8px 14px;font-size:13px;font-weight:600;white-space:nowrap}
+.header-stop:hover{background:#5a1f1f}
+.header-stop:disabled{opacity:.6;cursor:default}
+/* Without captions the diagram takes the freed height instead of leaving a gap. */
+.player.no-captions .diagram-frame{flex:1 1 auto;height:auto;max-height:none}
+/* Motion graphics: beat progress, title and kicker entrances, camera ease, icon draw-on, growing bars. */
+.beat-progress{display:flex;gap:4px;padding:10px 16px 0;flex-shrink:0}
+.beat-progress span{height:3px;border-radius:2px;background:#ffffff33;overflow:hidden}
+.beat-progress i{display:block;height:100%;background:#fff;transform-origin:left}
+.title-words>span>span{display:inline-block;animation:word-in .5s cubic-bezier(.2,.7,.2,1) backwards}
+@keyframes word-in{from{opacity:0;transform:translateY(10px)}}
+.player-kicker{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;animation:kicker-in .4s ease-out backwards}
+@keyframes kicker-in{from{opacity:0;transform:translateX(-12px)}}
+.node-pop svg.lucide>*{animation:icon-draw .9s ease-out .1s backwards}
+@keyframes icon-draw{from{stroke-dasharray:120;stroke-dashoffset:120}to{stroke-dasharray:120;stroke-dashoffset:0}}
+.chart-bar{animation:bar-grow .7s cubic-bezier(.2,.7,.2,1) backwards;transform-origin:left}
+.chart-bar[data-negative=true]{transform-origin:right}
+@keyframes bar-grow{from{transform:scaleX(0)}}
+/* Crowded diagrams dim items already covered; the current and previous stay bright. */
+[data-past]>.node-pop{transition:opacity .5s ease}
+[data-past=true]>.node-pop{opacity:.35}

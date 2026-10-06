@@ -96,23 +96,23 @@ class GenerationService:
             for name in (unit_name, "ModelQuestion"):
                 schema["$defs"][name]["properties"]["segment_id"]["enum"] = [s["id"] for s in task["segments"]]
             node=schema["$defs"]["DiagramNode"]
-            node_ids=[f"node_{i}" for i in range(4)]
+            node_ids=[f"node_{i}" for i in range(8)]
             node["properties"]["id"]["enum"]=node_ids
             node["properties"]["icon"]={"type":"string","enum":ICONS}
             node["properties"]["detail"]["minLength"]=3
             node["required"]=sorted(set(node.get("required",[]))|{"detail","icon","role"})
             for field in ("source","target"):
                 schema["$defs"]["Connection"]["properties"][field]["enum"]=node_ids
-            schema["$defs"]["Connection"]["properties"]["id"]["enum"]=[f"conn_{i}" for i in range(4)]
+            schema["$defs"]["Connection"]["properties"]["id"]["enum"]=[f"conn_{i}" for i in range(8)]
             if contract.__name__ == "ModelStoryboard":
                 scene_ids = [f"scene_{i}" for i in range(3)]
-                beat_ids = [f"beat_{i}" for i in range(5)]
+                beat_ids = [f"beat_{i}" for i in range(8)]
                 schema["$defs"]["StoryboardScene"]["properties"]["id"]["enum"] = scene_ids
                 templates = schema["$defs"]["StoryboardScene"]["properties"]["template"]
                 templates["enum"] = [t for t in templates["enum"] if t != "chart"]
                 schema["$defs"]["ModelBeat"]["properties"]["scene_id"]["enum"] = scene_ids
                 schema["$defs"]["ModelBeat"]["properties"]["beat_id"]["enum"] = beat_ids
-                schema["$defs"]["SemanticOperation"]["properties"]["target"]["enum"] = (node_ids + [f"conn_{i}" for i in range(4)]
+                schema["$defs"]["SemanticOperation"]["properties"]["target"]["enum"] = (node_ids + [f"conn_{i}" for i in range(8)]
                     + [f"row_{i}" for i in range(8)] + [f"row_{i}_c{j}" for i in range(8) for j in range(4)]
                     + [f"line_{i+1}" for i in range(30)] + [f"point_{i}" for i in range(8)]
                     + ["image"] + [f"annotation_{i}" for i in range(6)])
@@ -171,7 +171,7 @@ class GenerationService:
             "Do not use SSML, pronunciation guesses, extra silence or slower speech to fill the learner's time budget. "
             "For each narration unit select one supplied segment_id whose passage teaches that point. "
             "Aim for 40 to 80 total narration words over 3 to 5 beats (2 if simpler is justified). Count the words. Do not return timing or evidence quote fields. "
-            "Diagram nodes use node_0 through node_3 in order with unique slots 0 to 3. Every node has a short label (ideally 1 to 4 words, at most 44 characters), a detail line of 3 to 8 words (at most 70 characters) "
+            "Diagram nodes use node_0 through node_7 in order with unique slots 0 to 7; use as many as the content needs (2 to 8). Every node has a short label (ideally 1 to 4 words, at most 44 characters), a detail line of 3 to 8 words (at most 70 characters) "
             "that complements rather than repeats the spoken sentence. Preserve essential conditions and qualifiers; move lengthy explanation into narration or another beat, never silently abbreviate meaning. Every node has "
             "an icon from the allowed list that shows the idea, and a role. "
             "Connections use conn_0 through conn_3 and must refer to existing nodes. "

@@ -519,6 +519,14 @@ export interface components {
             /** Target */
             target: string;
         };
+        /** CoverPhoto */
+        CoverPhoto: {
+            asset: components["schemas"]["AssetRecord"];
+            /** Alt */
+            alt: string;
+            /** Query */
+            query: string;
+        };
         /** CoverageEntry */
         CoverageEntry: {
             /** Short Id */
@@ -990,7 +998,7 @@ export interface components {
              * Template
              * @enum {string}
              */
-            template: "process" | "comparison" | "example" | "timeline" | "chart" | "steps" | "cycle" | "dos_donts" | "key_fact";
+            template: "process" | "comparison" | "example" | "timeline" | "chart" | "steps" | "cycle" | "dos_donts" | "key_fact" | "funnel" | "matrix" | "hierarchy" | "venn";
             /** Prerequisites */
             prerequisites: string[];
         };
@@ -1258,7 +1266,7 @@ export interface components {
              * Template
              * @enum {string}
              */
-            template: "process" | "comparison" | "example" | "timeline" | "chart" | "steps" | "cycle" | "dos_donts" | "key_fact";
+            template: "process" | "comparison" | "example" | "timeline" | "chart" | "steps" | "cycle" | "dos_donts" | "key_fact" | "funnel" | "matrix" | "hierarchy" | "venn";
             /** Nodes */
             nodes: components["schemas"]["DiagramNode"][];
             /** Connections */
@@ -1422,6 +1430,7 @@ export interface components {
              * @default false
              */
             optional: boolean;
+            cover?: components["schemas"]["CoverPhoto"] | null;
             /**
              * Question Required
              * @default false

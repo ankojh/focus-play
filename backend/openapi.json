@@ -1140,6 +1140,32 @@
         ],
         "title": "Connection"
       },
+      "CoverPhoto": {
+        "properties": {
+          "asset": {
+            "$ref": "#/components/schemas/AssetRecord"
+          },
+          "alt": {
+            "type": "string",
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Alt"
+          },
+          "query": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Query"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "asset",
+          "alt",
+          "query"
+        ],
+        "title": "CoverPhoto"
+      },
       "CoverageEntry": {
         "properties": {
           "short_id": {
@@ -1271,7 +1297,7 @@
           },
           "slot": {
             "type": "integer",
-            "maximum": 3.0,
+            "maximum": 7.0,
             "minimum": 0.0,
             "title": "Slot"
           },
@@ -2223,7 +2249,11 @@
               "steps",
               "cycle",
               "dos_donts",
-              "key_fact"
+              "key_fact",
+              "funnel",
+              "matrix",
+              "hierarchy",
+              "venn"
             ],
             "title": "Template"
           },
@@ -2739,7 +2769,11 @@
               "steps",
               "cycle",
               "dos_donts",
-              "key_fact"
+              "key_fact",
+              "funnel",
+              "matrix",
+              "hierarchy",
+              "venn"
             ],
             "title": "Template"
           },
@@ -2816,7 +2850,7 @@
             "anyOf": [
               {
                 "type": "integer",
-                "maximum": 3.0,
+                "maximum": 7.0,
                 "minimum": 0.0
               },
               {
@@ -3187,6 +3221,16 @@
             "type": "boolean",
             "title": "Optional",
             "default": false
+          },
+          "cover": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CoverPhoto"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "question_required": {
             "type": "boolean",

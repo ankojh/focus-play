@@ -92,9 +92,11 @@ def validate_diagram(draft: ShortDraft):
     if draft.template == "dos_donts" and not {"good", "bad"} <= roles:
         raise ValueError("A dos_donts diagram needs at least one node with role good and one with role bad.")
     if draft.template == "cycle" and len(draft.nodes) < CYCLE_MIN:
-        raise ValueError("A cycle diagram needs 3 or 4 nodes.")
+        raise ValueError("A cycle diagram needs 3 to 8 nodes.")
+    if draft.template == "venn" and len(draft.nodes) != 3:
+        raise ValueError("A venn diagram needs exactly 3 nodes: two ideas and their overlap.")
     if draft.template == "key_fact" and len(draft.nodes) < KEY_FACT_MIN:
-        raise ValueError("A key_fact diagram needs the main fact in node_0 plus 1 to 3 supporting nodes.")
+        raise ValueError("A key_fact diagram needs the main fact in node_0 plus 1 to 7 supporting nodes.")
 
 
 def validate_draft(draft: ShortDraft, segments, require_question: bool, earlier=(), *, allow_recap=False, earlier_questions=(), example=None):

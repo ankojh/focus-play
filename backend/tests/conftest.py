@@ -10,3 +10,9 @@ def isolated_llm_environment(monkeypatch):
             monkeypatch.delenv(name)
     # Existing transport mocks remain explicit Ollama rollback regressions.
     monkeypatch.setenv("OLLAMA_MODEL", "gemma4:12b-mlx")
+
+
+@pytest.fixture(autouse=True)
+def no_cover_photo_search(monkeypatch):
+    # Cover photos use the public network; tests never search for them.
+    monkeypatch.setenv("IMAGE_SEARCH", "off")

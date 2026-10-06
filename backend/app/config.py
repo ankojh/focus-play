@@ -51,6 +51,9 @@ class Settings:
     youtube_key: str = field(default_factory=lambda: os.getenv("YOUTUBE_API_KEY", ""))
     supadata_key: str = field(default_factory=lambda: os.getenv("SUPADATA_API_KEY", ""))
     rank_candidates: int = field(default_factory=lambda: int(os.getenv("RANK_CANDIDATES", "8")))
+    image_search: str = field(default_factory=lambda: os.getenv("IMAGE_SEARCH", "openverse"))
+    imagegen_python: Path = field(default_factory=lambda: ROOT / os.getenv("IMAGEGEN_PYTHON", ".runtime/imagegen/bin/python"))
+    imagegen_model: str = field(default_factory=lambda: os.getenv("IMAGEGEN_MODEL", "filipstrand/Z-Image-Turbo-mflux-4bit"))
     queue_size: int = 8
 
     def __post_init__(self):
@@ -76,6 +79,8 @@ class Settings:
             raise ValueError("LLM timeouts must be bounded: connect 1–30s, read 1–300s, attempt 1–600s.")
         if not 1 <= self.task_timeout <= 120 or not 1 <= self.first_playable_timeout <= 240:
             raise ValueError("Generation budgets must be bounded: task 1–120s, first playable 1–240s.")
+        if self.image_search not in {"openverse", "generate", "off"}:
+            raise ValueError("IMAGE_SEARCH must be openverse, generate or off.")
         if not 2 <= self.rank_candidates <= 15:
             raise ValueError("RANK_CANDIDATES must be between 2 and 15.")
         if self.identity_receipt is not None:

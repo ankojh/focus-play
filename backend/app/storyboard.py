@@ -10,7 +10,7 @@ STORYBOARD_VERSION = 2
 COMPILER_VERSION = "2-mixed-visuals"
 KINDS = {"reveal": "appear", "hide": "disappear", "focus": "highlight",
          "connect": "draw", "move": "move", "change_state": "change_state"}
-FIXED_LAYOUTS = {"cycle", "dos_donts", "key_fact"}
+FIXED_LAYOUTS = {"cycle", "dos_donts", "key_fact", "funnel", "matrix", "hierarchy", "venn"}
 
 
 def validate_scene(scene):
@@ -21,8 +21,8 @@ def validate_scene(scene):
     nodes = {n.id: n for n in scene.nodes}
     edges = {e.id: e for e in scene.connections}
     states = {s.id: s for s in scene.states}
-    if not 2 <= len(nodes) <= 4 or len(nodes) != len(scene.nodes) or len(edges) != len(scene.connections) or len(edges) > 4 or nodes.keys() & edges.keys():
-        raise ValueError("Scene needs 2 to 4 unique nodes and unique connection IDs.")
+    if not 2 <= len(nodes) <= 8 or len(nodes) != len(scene.nodes) or len(edges) != len(scene.connections) or len(edges) > 8 or nodes.keys() & edges.keys():
+        raise ValueError("Scene needs 2 to 8 unique nodes and unique connection IDs.")
     if len({n.slot for n in scene.nodes}) != len(nodes):
         raise ValueError("Nodes cannot share a slot.")
     if any(e.source not in nodes or e.target not in nodes or e.source == e.target for e in edges.values()):
@@ -131,8 +131,8 @@ def validate_boundaries(units, duration):
 
 
 def validate_timeline(scenes, units, duration):
-    if not 2 <= len(units) <= 5 or not 1 <= len(scenes) <= 3:
-        raise ValueError("Playback needs 2 to 5 beats and 1 to 3 scenes.")
+    if not 2 <= len(units) <= 8 or not 1 <= len(scenes) <= 3:
+        raise ValueError("Playback needs 2 to 8 beats and 1 to 3 scenes.")
     validate_boundaries(units, duration)
     if not scenes or len({s.id for s in scenes}) != len(scenes) or any(not s.id for s in scenes):
         raise ValueError("Timeline needs unique scene IDs.")

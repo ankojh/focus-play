@@ -13,6 +13,8 @@ from .planning import (PLANNING_VERSION, MIN_TARGET_MS, DEFAULT_TARGET_MS, new_s
 from .validation import similar, word_set
 from .storyboard import STORYBOARD_VERSION, COMPILER_VERSION, compile_storyboard
 from .assets import Assets
+from .photos import PhotoSearch
+from .imagegen import ImageGenerator
 from .visuals import VISUAL_VERSION, chartable
 from .errors import AppError, Cancelled
 from .readiness import required_media, snapshot_readiness
@@ -26,14 +28,18 @@ from .teaching import (TEACHING_VERSION, validate_plan as check_plan, planned_sh
 
 
 TEMPLATES = {
-    "process": "2 to 4 stages in order; roles start, step, result; connect each stage to the next.",
-    "steps": "2 to 4 numbered how-to steps; each detail is a short instruction; roles step.",
-    "cycle": "3 or 4 stages that repeat in a loop; roles step. The application draws the loop.",
+    "process": "2 to 8 stages in order; roles start, step, result; connect each stage to the next.",
+    "steps": "2 to 8 numbered how-to steps; each detail is a short instruction; roles step.",
+    "cycle": "3 to 8 stages that repeat in a loop; roles step. The application draws the loop.",
     "comparison": "two to four options compared side by side; slots 0 and 1 are the main pair.",
     "dos_donts": "the right way (role good) against the wrong way (role bad); include at least one of each.",
-    "key_fact": "node_0 is the single most important rule or number; 1 to 3 supporting nodes explain it.",
+    "key_fact": "node_0 is the single most important rule or number; 1 to 7 supporting nodes explain it.",
     "timeline": "events in time order; roles step.",
     "example": "a concrete worked example from the passages, from situation to outcome.",
+    "funnel": "3 to 8 stages that narrow in order, widest first (e.g. many candidates to few results); roles step, last result; no connections.",
+    "matrix": "a 2x2 grid of four quadrants split by two factors; node_0 top-left, node_1 top-right, node_2 bottom-left, node_3 bottom-right; no connections.",
+    "hierarchy": "node_0 is the parent (organisation, system, category); 2 to 7 child nodes are its parts; connect node_0 to each child.",
+    "venn": "exactly 3 nodes: node_0 and node_1 are two ideas, node_2 is what they share (the overlap); no connections.",
     "chart": "quantitative comparison using kind chart with source values, units and a zero-inclusive scale; never legacy diagram mini-bars or invented values.",
 }
 TEMPLATE_GUIDE = " ".join(f"{name}: {text}" for name, text in TEMPLATES.items())
@@ -84,6 +90,11 @@ class Jobs:
         self.youtube = youtube or YouTubeSources(store,settings)
         self.assets = Assets(store)
         self.assets.install_bundled()
+        mode = getattr(settings, "image_search", "off")
+        self.photos = PhotoSearch(self.assets) if mode == "openverse" else None
+        if mode == "generate":
+            self.photos = ImageGenerator(self.assets, settings.imagegen_python, settings.imagegen_model)
+            threading.Thread(target=self.photos.warm, daemon=True).start()
         self.queue = asyncio.PriorityQueue(maxsize=settings.queue_size)
         self.cancel_flags = {}
         self.active = set()
@@ -118,6 +129,8 @@ class Jobs:
 
     async def stop(self):
         self.closing = True
+        if hasattr(self.photos, "stop"):
+            self.photos.stop()
         for flag in self.cancel_flags.values():
             flag.set()
         # Provider calls finish or see the cancellation flag before the store closes.
@@ -841,6 +854,8 @@ class Jobs:
                                "earlier_questions": earlier_questions, "segments": [s.id for s in segments], "stage": "draft"})
         cached = self.store.cache_get(short_key)
         await self.stage(lesson, "preparing the first short" if index == 0 else f"preparing short {index + 1}", short, "generating")
+        # Found or generated alongside drafting and speech, so it rarely delays the short.
+        cover = asyncio.create_task(self.cover_photo(lesson, short, cancel))
         model_start = time.monotonic()
         def valid(content):
             draft = attach_evidence(content, segments) if isinstance(content, ModelStoryboard) else content
@@ -854,20 +869,20 @@ class Jobs:
             validate_draft(draft, segments, short.question_required, earlier_narration,
                            allow_recap=short.teaching_role == "recap", earlier_questions=earlier_questions, example=example)
         task = {"task": "Teach one learning outcome with a supported visual demonstration. Return a complete ModelStoryboard version 2. "
-                    "Aim for 3 to 5 brief beats: question/situation, baseline, meaningful change or alternative, takeaway. A simpler two-beat explanation is allowed. "
+                    "Use as many brief beats as the content needs (2 to 8), one per item: question/situation, the steps or parts, takeaway. Never pad or cut a list to a fixed size. "
                     "Use 40 to 80 total spoken words, not more words just to add beats. Each beat has a unique beat_id, purpose, scene_id, cited segment_id and explicit operations. "
                     "Use 1 to 3 scenes in contiguous order. A changed scene_id replaces the scene; never return to an earlier scene. "
                     "Reveal nodes before focusing, moving, hiding or changing their state; connect only after both endpoints are revealed. "
                     "Show concepts changing, not every label at once. Explicitly target the concept being taught, not a name mentioned as absent. "
                     "State changes select an authored state_id for that target with supported label/detail/role. Use source-only examples; no synthetic substitutions or invented benchmarks. "
-                    "Preserve the supplied example entities and facts. Open directly with the outcome, define necessary terms once, show why/how, then give a concise takeaway or condition. "
+                    "Preserve the supplied example entities and facts. Tell it as a short story: open with a real situation, problem or question from the passages that leads into the outcome, define necessary terms once, show what happens and why, then resolve it with a concise takeaway or condition. Use only situations, people and examples from the passages; never invent characters or hypothetical anecdotes. "
                     "Every node needs a reveal and every connection a connect. For cycle supply the explicit loop connections; dos_donts has no connections. "
                     "Use the compact coverage history to add new meaning, not synonym-based duplicates. An explicit recap may briefly revisit its dependencies without claiming new coverage. "
                     "A distinct application of a known concept is allowed. Avoid generic hooks, filler and false guarantees. "
                     "A required checkpoint tests the outcome actually taught: prediction/application over trivia, one unambiguous correct_answer, "
                     "1 to 3 plausible distractors representing misconceptions and supported reasoning in explanation. Do not repeat earlier questions. Question must be null unless required. "
                     "Choose the format for the teaching intent, not random variety: diagram for relationships/processes, table for lookup, code for exact source snippets, chart for quantitative comparison, image only when an allowed candidate is relevant. "
-                    "Diagram scenes use 2 to 4 nodes, node_0 through node_3 and unique slots. "
+                    "Diagram scenes use as many nodes as the content needs (2 to 8), node_0 through node_7 and unique slots; never pad or truncate a list to a fixed size. "
                     "Table operations target row_0 through row_7 or row_0_c0 cells; code targets line_1 through line_30; charts target point_0 through point_7; images target image or annotation_0 through annotation_5. "
                     "Non-diagram renderers allow only reveal/hide/focus. Reveal every row, code line, chart point, image and annotation before focus/hide; cells inherit row visibility. "
                     "Code is display-only and must be copied exactly from its cited segment, never invented or executed. Chart values and units must match each point's cited passage. "
@@ -984,6 +999,7 @@ class Jobs:
         short.scenes = scenes
         short.storyboard_version = STORYBOARD_VERSION
         short.timeline_compiler_version = COMPILER_VERSION
+        short.cover = await cover
         short.status = "ready"
         if lesson.planning:
             lesson.planning.failed_skips_in_row = 0
@@ -1048,6 +1064,20 @@ class Jobs:
         # the original fixed outline. The next advance may select a stable batch.
         return True
 
+    async def cover_photo(self, lesson, short, cancel):
+        if self.photos is None or short.cover is not None:
+            return short.cover
+        used = {s.cover.asset.original_source for s in lesson.shorts if s.cover and s.id != short.id}
+        started = time.monotonic()
+        try:
+            return await asyncio.wait_for(asyncio.to_thread(self.photos.cover, lesson.request.goal, short.objective, used, cancel),
+                                          getattr(self.photos, "wait_seconds", 20))
+        except Exception:
+            # Photos are optional decoration; never fail a short because of one.
+            return None
+        finally:
+            short.timings["cover_photo_seconds"] = time.monotonic() - started
+
     async def draft_with_fallback(self, lesson, task, cancel, valid, segments):
         """Draft a short; if it still fails after its repair, try once with the simplest visual.
 
@@ -1064,7 +1094,7 @@ class Jobs:
         lesson.metrics["simpler_visual_fallbacks"] = lesson.metrics.get("simpler_visual_fallbacks", 0) + 1
         task["template"] = SIMPLE_TEMPLATE
         task["task"] += (" The previous visual could not be made accurately. Use a simple key_fact diagram: "
-                         "the main point first, then 1 to 3 supporting points from the passages.")
+                         "the main point first, then 1 to 7 supporting points from the passages.")
         return attach_evidence(await asyncio.to_thread(self.generate, lesson, ModelStoryboard, task, cancel, valid, metric="repair"), segments)
 
     def skip_failed(self, lesson, short, exc, cancel):

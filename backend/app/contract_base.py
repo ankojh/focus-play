@@ -16,6 +16,6 @@ class SceneAction(Contract):
     kind: Literal["appear", "disappear", "highlight", "move", "draw", "change_state"]
     target: str
     at_ms: int = Field(ge=0)
-    to_slot: int | None = Field(default=None, ge=0, le=3)
+    to_slot: int | None = Field(default=None, ge=0, le=7)
     state_id: str | None = None
     beat_id: str | None = None

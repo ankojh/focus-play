@@ -66,14 +66,16 @@ class NarrationUnit(Contract):
 TeachingRole = Literal["foundation", "mechanism", "worked_example", "comparison", "misconception", "application", "practice", "recap"]
 CurriculumRole = Literal["core", "extension", "closing"]
 
-Template = Literal["process", "comparison", "example", "timeline", "chart", "steps", "cycle", "dos_donts", "key_fact"]
+Template = Literal["process", "comparison", "example", "timeline", "chart", "steps", "cycle", "dos_donts", "key_fact",
+                   "funnel", "matrix", "hierarchy", "venn"]
 # Roles colour a node: start, step and result for sequences, good and bad for do vs. don't.
 Role = Literal["neutral", "start", "step", "result", "warning", "good", "bad"]
 class DiagramNode(Contract):
     id: str = Field(pattern=r"^[a-z][a-z0-9_]{0,19}$")
     label: str = Field(min_length=1, max_length=44)
     detail: str = Field(default="", max_length=70)
-    slot: int = Field(ge=0, le=3)
+    # Up to 8 items per diagram; the player dims earlier items when crowded.
+    slot: int = Field(ge=0, le=7)
     shape: Literal["box", "circle", "bar"] = "box"
     # Saved lessons predate icons and roles; the defaults render as before.
     icon: str | None = Field(default=None, max_length=30)
@@ -94,7 +96,7 @@ class DraftAction(Contract):
     kind: Literal["appear", "disappear", "highlight", "move", "draw"]
     target: str
     unit: int = Field(ge=0, le=3)
-    to_slot: int | None = Field(default=None, ge=0, le=3)
+    to_slot: int | None = Field(default=None, ge=0, le=7)
 
 class Question(Contract):
     prompt: str = Field(min_length=10, max_length=240)
@@ -185,6 +187,12 @@ def legacy_scene_kinds(value):
         return [{"kind": "diagram", **scene} if isinstance(scene, dict) else scene for scene in value]
     return value
 
+class CoverPhoto(Contract):
+    # Decorative context only: never cited, reviewed or required for playback.
+    asset: AssetRecord
+    alt: str = Field(min_length=1, max_length=240)
+    query: str = Field(max_length=120)
+
 ShortState = Literal["queued", "generating", "validating", "synthesizing", "ready", "failed", "cancelled"]
 class Short(Contract):
     target_duration_ms: int = Field(default=40000, ge=1000, le=40000)
@@ -213,6 +221,7 @@ class Short(Contract):
     status: ShortState = "queued"
     error: ErrorInfo | None = None
     optional: bool = False
+    cover: CoverPhoto | None = None
     question_required: bool = False
     cache_hit: bool = False
     provider_settings: dict = {}
@@ -231,7 +240,7 @@ class Short(Contract):
 class SemanticOperation(Contract):
     kind: Literal["reveal", "hide", "focus", "connect", "move", "change_state"]
     target: str
-    to_slot: int | None = Field(default=None, ge=0, le=3)
+    to_slot: int | None = Field(default=None, ge=0, le=7)
     state_id: str | None = None
 
 class StoryboardScene(Contract):
@@ -239,8 +248,8 @@ class StoryboardScene(Contract):
     kind: Literal["diagram"] = "diagram"
     summary: str = Field(min_length=5, max_length=240)
     template: Template
-    nodes: list[DiagramNode] = Field(min_length=2, max_length=4)
-    connections: list[Connection] = Field(max_length=4)
+    nodes: list[DiagramNode] = Field(min_length=2, max_length=8)
+    connections: list[Connection] = Field(max_length=8)
     states: list[DiagramState] = Field(max_length=12)
 
 AuthoredVisual = Annotated[StoryboardScene | TableVisual | CodeVisual | ChartVisual | ImageVisual, Field(discriminator="kind")]
@@ -255,7 +264,7 @@ class StoryboardDraft(Contract):
     storyboard_version: Literal[2] = 2
     objective: str = Field(min_length=5, max_length=150)
     prerequisites: list[Annotated[str, Field(min_length=1, max_length=80)]] = Field(max_length=4)
-    narration_units: list[NarrationBeat] = Field(min_length=2, max_length=5)
+    narration_units: list[NarrationBeat] = Field(min_length=2, max_length=8)
     scenes: list[AuthoredVisual] = Field(min_length=1, max_length=3)
     _legacy_scenes = field_validator("scenes", mode="before")(legacy_scene_kinds)
     question: Question | None = None
@@ -506,7 +515,7 @@ class ModelStoryboard(Contract):
     storyboard_version: Literal[2]
     objective: str = Field(min_length=5, max_length=150)
     prerequisites: list[Annotated[str, Field(min_length=1, max_length=80)]] = Field(max_length=4)
-    narration_units: list[ModelBeat] = Field(min_length=2, max_length=5)
+    narration_units: list[ModelBeat] = Field(min_length=2, max_length=8)
     scenes: list[AuthoredVisual] = Field(min_length=1, max_length=3)
     _legacy_scenes = field_validator("scenes", mode="before")(legacy_scene_kinds)
     question: ModelQuestion | None = None

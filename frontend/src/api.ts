@@ -11,6 +11,7 @@ export type ImageScene = components['schemas']['ImageScene'];
 export type Health = components['schemas']['ProviderHealth'];
 export type SearchResult = components['schemas']['SearchItem'];
 export type Evidence = components['schemas']['EvidenceRef'];
+export type CoverPhoto = components['schemas']['CoverPhoto'];
 export class ApiError extends Error { constructor(public code: string, message: string) { super(message); } }
 export async function api<T>(url: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch('/api' + url, { method: body === undefined ? 'GET' : 'POST', headers: body === undefined ? undefined : {'Content-Type':'application/json'}, body: body === undefined ? undefined : JSON.stringify(body), signal });
