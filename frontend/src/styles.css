@@ -15,3 +15,7 @@
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 
 .source-video-link{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:#8ebcff;margin-top:12px;text-decoration:none}.source-card{cursor:default}.source-video-link:hover{text-decoration:underline}.form-footer p{line-height:1.6;max-width:240px}
+.rating .stars{display:flex;gap:6px;margin-top:14px}
+.rating .stars button{background:none;border:0;padding:4px;color:#f5c518;cursor:pointer}
+.source-fallback{display:grid;gap:8px;margin-top:18px;text-align:left}
+.source-fallback a{display:inline-flex;align-items:center;gap:6px;text-decoration:none}

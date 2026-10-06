@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Play, Pause, ChevronRight, Volume2, VolumeX, ArrowUp, ArrowDown, Check, BookOpen, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { Play, Pause, ChevronRight, Volume2, VolumeX, ArrowUp, ArrowDown, Check, BookOpen, ThumbsUp, ThumbsDown, Star } from 'lucide-react';
 import type { Short } from './api';
 import { duration, restore } from './api';
 import { Visual } from './Visual';
 import { Captions, Transcript } from './Captions';
 import { atTime, timelineError } from './playback';
-export function Player({short, lessonId, previous, next, onPrevious, onNext, autoplay, onAudioError, onPosition, onSources, sourcesVisible}: {short: Short; lessonId: string; previous: boolean; next: boolean; onPrevious: ()=>void; onNext: ()=>void; autoplay: boolean; onAudioError:()=>void; onPosition:(shortId:string,positionMs:number)=>void; onSources:()=>void; sourcesVisible:boolean}) {
+export function Player({short, lessonId, previous, next, last, onPrevious, onNext, autoplay, onAudioError, onPosition, onSources, sourcesVisible}: {short: Short; lessonId: string; previous: boolean; next: boolean; last: boolean; onPrevious: ()=>void; onNext: ()=>void; autoplay: boolean; onAudioError:()=>void; onPosition:(shortId:string,positionMs:number)=>void; onSources:()=>void; sourcesVisible:boolean}) {
   const audio = useRef<HTMLAudioElement>(null);
   const [time,setTime] = useState(0), [playing,setPlaying]=useState(false), [error,setError]=useState(''), [answered,setAnswered]=useState<number|null>(null), [ended,setEnded]=useState(false);
   const [muted,setMuted]=useState(false), [reaction,setReaction]=useState<'like'|'dislike'|null>(null);
   const [captionsVisible,setCaptionsVisible]=useState(true);
+  const ratingKey=`rating:${lessonId}`, [rating,setRating]=useState<number|null>(()=>restore(ratingKey,null)), [hoverRating,setHoverRating]=useState(0);
+  const rate=(value:number)=>{setRating(value);localStorage.setItem(ratingKey,JSON.stringify(value));};
   const lastSave = useRef(0), pendingSeek = useRef<number|null>(null), lastPosition=useRef(0);
   const reportPosition=()=>{if(audio.current){lastPosition.current=performance.now();onPosition(short.id,audio.current.currentTime*1000);}};
   const shortsView = useRef<HTMLDivElement>(null), touchStart = useRef<{x:number;y:number}|null>(null);
@@ -77,6 +79,7 @@ export function Player({short, lessonId, previous, next, onPrevious, onNext, aut
     <Transcript short={short} seek={seek}/>
     {error && <p className="error" role="alert">{error}</p>}
     {question && ended && <div className="question"><span className="eyebrow">CHECK YOUR UNDERSTANDING · {question.allowance_ms/1000} SEC ALLOWANCE</span><p className="muted">This practice allowance is included in your session plan. Take the time you need; answers are not timed.</p><h3>{question.prompt}</h3><div className="answers">{question.options.map((option,i)=><button key={i} className={answered===i?'selected':''} aria-pressed={answered===i} onClick={()=>{setAnswered(i);localStorage.setItem(`answer:${key}`,JSON.stringify(i));}}>{answered===i && <Check size={16} aria-hidden="true"/>}{option}</button>)}</div>{answered!==null && <p role="status"><strong>{answered===question.answer_index?'Correct.':'Try this explanation.'}</strong> {question.explanation}</p>}{answered!==null && next && <button className="primary" onClick={onNext}>Continue <ChevronRight size={16}/></button>}</div>}
+    {last && ended && (!question || answered!==null) && <div className="question rating"><span className="eyebrow">LESSON COMPLETE</span><h3>How was this lesson?</h3><div className="stars" role="radiogroup" aria-label="Rate this lesson" onMouseLeave={()=>setHoverRating(0)}>{[1,2,3,4,5].map(n=><button key={n} role="radio" aria-checked={rating===n} aria-label={`${n} star${n===1?'':'s'}`} onMouseEnter={()=>setHoverRating(n)} onClick={()=>rate(n)}><Star size={28} fill={n<=(hoverRating||rating||0)?'currentColor':'none'}/></button>)}</div>{rating!==null && <p role="status">Thanks for rating this lesson {rating} out of 5.</p>}</div>}
     <p className="keyboard-note">Scroll or swipe: switch shorts. Space: play/pause. ↑ ↓: shorts. ← →: seek.</p>
   </div>;
 }
