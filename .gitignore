@@ -16,3 +16,4 @@ frontend/playwright-report/
 .DS_Store
 
 *.tsbuildinfo
+frontend/dist-demo/

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Play, Pause, ChevronRight, Volume2, VolumeX, ArrowUp, ArrowDown, Check, BookOpen, ThumbsUp, ThumbsDown } from 'lucide-react';
 import type { Short, CoverPhoto } from './api';
-import { duration, restore } from './api';
+import { duration, mediaUrl, restore } from './api';
 import { Visual } from './Visual';
 import { useShortsNavigation } from './navigation';
 import { atTime, timelineError } from './playback';
@@ -13,17 +13,16 @@ function Cover({cover,progress,hero,onError}:{cover:CoverPhoto;progress:number;h
   // Slow pan and zoom across the whole short; the direction varies per photo.
   const p=matchMedia('(prefers-reduced-motion: reduce)').matches?0:Math.min(1,Math.max(0,progress)),dir=parseInt(cover.asset.id.slice(0,2),16)%4;
   const transform=`translate(${(dir%2?-3:3)*p}%,${(dir<2?2:-2)*p}%) scale(${1.08+.14*p})`;
-  return <figure className={`cover-photo ${hero?'polaroid':'sticker'}`} aria-hidden="true"><span className="cover-frame"><img src={`/api/assets/${cover.asset.id}`} alt="" style={{transform}} onError={onError}/></span><figcaption>{cover.asset.illustrative?'AI-generated':cover.alt}</figcaption></figure>;
+  return <figure className={`cover-photo ${hero?'polaroid':'sticker'}`} aria-hidden="true"><span className="cover-frame"><img src={mediaUrl('assets',cover.asset.id)} alt="" style={{transform}} onError={onError}/></span><figcaption>{cover.asset.illustrative?'AI-generated':cover.alt}</figcaption></figure>;
 }
-export function Player({short, lessonId, previous, next, onPrevious, onNext, autoplay, onAudioError, onPosition, onSources, sourcesVisible}: {short: Short; lessonId: string; previous: boolean; next: boolean; onPrevious: ()=>void; onNext: ()=>void; autoplay: boolean; onAudioError:()=>void; onPosition:(shortId:string,positionMs:number)=>void; onSources:()=>void; sourcesVisible:boolean}) {
+export function Player({short, lessonId, previous, next, onPrevious, onNext, autoplay, onAudioError, onSources, sourcesVisible}: {short: Short; lessonId: string; previous: boolean; next: boolean; onPrevious: ()=>void; onNext: ()=>void; autoplay: boolean; onAudioError:()=>void; onSources:()=>void; sourcesVisible:boolean}) {
   const audio = useRef<HTMLAudioElement>(null);
   const [time,setTime] = useState(0), [playing,setPlaying]=useState(false), [error,setError]=useState(''), [answered,setAnswered]=useState<number|null>(null), [ended,setEnded]=useState(false);
   const [muted,setMuted]=useState(false), [reaction,setReaction]=useState<'like'|'dislike'|null>(null), [coverFailed,setCoverFailed]=useState(false);
-  const lastSave = useRef(0), pendingSeek = useRef<number|null>(null), lastPosition=useRef(0);
-  const reportPosition=()=>{if(audio.current){lastPosition.current=performance.now();onPosition(short.id,audio.current.currentTime*1000);}};
+  const lastSave = useRef(0), pendingSeek = useRef<number|null>(null);
   const frame = useRef<HTMLDivElement>(null), {view,touch}=useShortsNavigation({previous,next,onPrevious,onNext});
   const key = `playback:${lessonId}:${short.id}`;
-  useEffect(()=>{ setTime(autoplay?0:restore(key,0));setPlaying(false);setError('');setAnswered(restore(`answer:${key}`,null));setReaction(restore(`reaction:${key}`,null));setEnded(false);setCoverFailed(false);lastSave.current=0;pendingSeek.current=null;lastPosition.current=0;onPosition(short.id,autoplay?0:restore(key,0));
+  useEffect(()=>{ setTime(autoplay?0:restore(key,0));setPlaying(false);setError('');setAnswered(restore(`answer:${key}`,null));setReaction(restore(`reaction:${key}`,null));setEnded(false);setCoverFailed(false);lastSave.current=0;pendingSeek.current=null;
     // Each new short slides up into place, like a swipe between videos.
     if(!matchMedia('(prefers-reduced-motion: reduce)').matches)frame.current?.animate([{opacity:0,transform:'translateY(48px) scale(.97)'},{opacity:1,transform:'none'}],{duration:480,easing:'cubic-bezier(.2,.8,.2,1)'}); },[key]);
   useEffect(()=>{const current=audio.current;return()=>current?.pause();},[key]);
@@ -65,7 +64,7 @@ export function Player({short, lessonId, previous, next, onPrevious, onNext, aut
       <div className="short-title"><span className="player-kicker" key={`${short.id}:${beat}`}>{kicker}</span><h2 className="title-words" key={short.id}>{short.objective.split(/\s+/).map((word,i)=><span key={i}><span style={{animationDelay:`${i*55}ms`}}>{word}</span>{' '}</span>)}</h2></div>
       <div className={`story-stage${story?' story':''}${phase.takeaway?' takeaway':''}`}>{stage}{phase.takeaway && <Takeaway text={short.learning_outcome || (final?`${final.label}${final.detail?` — ${final.detail}`:''}`:short.objective)} outcome={!!short.learning_outcome}/>}</div>
       <div className="controls"><div className="control-row"><span className="time-readout">{duration(time)} <span>/ {duration(short.measured_duration_ms)}</span></span></div><input aria-label="Seek within short" type="range" min="0" max={short.measured_duration_ms} value={Math.min(time,short.measured_duration_ms)} step="100" style={{'--played':`${Math.min(100,time/short.measured_duration_ms*100)}%`} as React.CSSProperties} onChange={e=>seek(Number(e.target.value))}/></div>
-      <audio key={key} ref={audio} src={`/api/audio/${short.audio_path}`} preload="auto" loop muted={muted} onTimeUpdate={()=>{if(performance.now()-lastPosition.current>=1000)reportPosition();}} onLoadedMetadata={()=>{const a=audio.current!;a.currentTime=Math.min((pendingSeek.current??(autoplay?0:restore(key,0)))/1000,a.duration);pendingSeek.current=null;reportPosition();if(a.currentTime>=a.duration-.1)setEnded(true);if(autoplay)play();}} onPlay={()=>setPlaying(true)} onPause={()=>{setPlaying(false);reportPosition();if(audio.current){setTime(audio.current.currentTime*1000);localStorage.setItem(key,JSON.stringify(audio.current.currentTime*1000));}}} onSeeked={()=>{const t=(audio.current?.currentTime??0)*1000;setTime(t);localStorage.setItem(key,JSON.stringify(t));lastSave.current=t;pendingSeek.current=null;reportPosition();}} onEnded={()=>{setEnded(true);const a=audio.current;if(a){a.currentTime=0;setTime(0);play();}}} onError={()=>{setError('The audio file could not load. Check the local server or repair the audio.');onAudioError();}}/>
+      <audio key={key} ref={audio} src={mediaUrl('audio',short.audio_path!)} preload="auto" loop muted={muted} onLoadedMetadata={()=>{const a=audio.current!;a.currentTime=Math.min((pendingSeek.current??(autoplay?0:restore(key,0)))/1000,a.duration);pendingSeek.current=null;if(a.currentTime>=a.duration-.1)setEnded(true);if(autoplay)play();}} onPlay={()=>setPlaying(true)} onPause={()=>{setPlaying(false);if(audio.current){setTime(audio.current.currentTime*1000);localStorage.setItem(key,JSON.stringify(audio.current.currentTime*1000));}}} onSeeked={()=>{const t=(audio.current?.currentTime??0)*1000;setTime(t);localStorage.setItem(key,JSON.stringify(t));lastSave.current=t;pendingSeek.current=null;}} onEnded={()=>{setEnded(true);const a=audio.current;if(a){a.currentTime=0;setTime(0);play();}}} onError={()=>{setError('The audio file could not load. Check the local server or repair the audio.');onAudioError();}}/>
     </div>
     <div className="short-actions" aria-label="Short actions">
       <button aria-label="Like short" aria-pressed={reaction==='like'} onClick={()=>react('like')}><span><ThumbsUp size={24}/></span><small>Like</small></button>

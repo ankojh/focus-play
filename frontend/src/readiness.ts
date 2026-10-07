@@ -1,20 +1,9 @@
 import { useEffect, useState } from 'react';
-import type { Lesson, Short } from './api';
+import { DEMO, mediaUrl, type Lesson, type Short } from './api';
 
 export function mediaReady(lesson:Lesson, short:Short) {
   return short.status==='ready' && !!short.audio_path && short.measured_duration_ms>0 &&
     (!lesson.readiness || lesson.readiness.ready_short_ids.includes(short.id));
-}
-export function readyAhead(lesson:Lesson, activeId:string, positionMs=0) {
-  const index=lesson.shorts.findIndex(s=>s.id===activeId);
-  if(index<0)return {mediaMs:0,nextCount:0};
-  let mediaMs=0,nextCount=0;
-  for(let i=index;i<lesson.shorts.length;i++) {
-    const short=lesson.shorts[i];if(!mediaReady(lesson,short))break;
-    mediaMs+=Math.max(0,short.measured_duration_ms-(i===index?Math.max(0,positionMs):0));
-    if(i>index)nextCount++;
-  }
-  return {mediaMs,nextCount};
 }
 
 const MAX_TOTAL=8*1024*1024, MAX_AUDIO=2_000_044, MAX_IMAGE=5_000_000;
@@ -23,7 +12,7 @@ export function useMediaPreload(lesson:Lesson|null, activeId:string, enabled:boo
   const index=lesson?.shorts.findIndex(s=>s.id===activeId)??-1;
   const targets: {id:string;audio:string;images:string[]}[]=[];
   let imagePixels=0;
-  if(enabled && lesson && lesson.job.status!=='cancelled' && index>=0) {
+  if(enabled && !DEMO && lesson && lesson.job.status!=='cancelled' && index>=0) {
     for(const short of lesson.shorts.slice(index+1,index+3)) {
       if(!mediaReady(lesson,short))break;
       const essential=short.scenes.filter(s=>s.kind==='image');
@@ -70,8 +59,8 @@ export function useMediaPreload(lesson:Lesson|null, activeId:string, enabled:boo
         if(controller.signal.aborted || used>=MAX_TOTAL)break;
         try {
           const audio=new Audio();media.push(audio);
-          await decode(audio,await blob(`/api/audio/${target.audio}`,MAX_AUDIO));
-          for(const id of target.images){const image=new Image();images.push(image);await decode(image,await blob(`/api/assets/${id}`,MAX_IMAGE));}
+          await decode(audio,await blob(mediaUrl('audio',target.audio),MAX_AUDIO));
+          for(const id of target.images){const image=new Image();images.push(image);await decode(image,await blob(mediaUrl('assets',id),MAX_IMAGE));}
           ready.push(target.id);
         } catch {if(controller.signal.aborted)break;failed.push(target.id);}
         publish();

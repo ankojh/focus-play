@@ -57,7 +57,7 @@ test('teaching outcomes and planned practice allowances are visible without a ti
   await page.getByRole('button',{name:'A row',exact:true}).click();await expect(page.locator('.question [role="status"]')).toContainText('Correct.');
 });
 
-test('final session copy explains the session length and coverage shortfall',async({page})=>{
+test('a finished lesson shows no session statistics, even when shorter than requested',async({page})=>{
   const lesson=makeLesson() as any;
   lesson.planning={version:2,completion_reason:'coverage_exhausted',completion_detail:'Available sources support only lookup and scans.'};
   lesson.duration_ledger={version:2,measured_ready_media_ms:60000,reserved_practice_ms:20000,estimated_unready_media_ms:0,reserved_closing_ms:0,forecast_total_ms:80000,final_content_ms:80000,original_content_ms:80000,extra_content_ms:0,utilisation:80000/300000,shortfall_ms:190000};
@@ -68,9 +68,9 @@ test('final session copy explains the session length and coverage shortfall',asy
   // The lesson heading stays lean: no back button and no measured-video/practice-allowance breakdown.
   await expect(page.locator('.lesson-heading')).not.toContainText('Measured ready video');await expect(page.locator('.lesson-heading')).not.toContainText('Scheduled practice allowance');
   await expect(page.getByRole('button',{name:'New lesson'})).toHaveCount(0);
-  await expect(page.getByTestId('session-shortfall')).toContainText('27% of the original budget');
-  await expect(page.getByTestId('session-shortfall')).toContainText(lesson.planning.completion_detail);
-  await expect(page.getByTestId('session-shortfall')).toContainText('No repeated loops or generation wait counted');
+  // A finished, healthy lesson has nothing to act on, so the status card and its statistics are gone.
+  await expect(page.locator('.progress-card')).toHaveCount(0);
+  await expect(page.getByText(/original budget|contiguous server-ready media|decode-checked/)).toHaveCount(0);
   await expect(page.locator('audio')).toHaveAttribute('loop','');
 });
 
@@ -161,7 +161,7 @@ test('refresh restores selected short and seek position without starting audio',
   await mock(page);await start(page);await page.getByRole('button',{name:'Next short'}).click();await page.getByLabel('Seek within short').fill('18000');await page.reload();await expect(page.locator('.player h2')).toHaveText('Understand an index two');await expect(page.locator('.player-kicker')).toHaveText(kicker(2,2));expect(await page.locator('audio').evaluate((a:HTMLAudioElement)=>a.paused)).toBe(true);
 });
 test('progress and reconnection recover snapshots without a second create request',async({page})=>{
-  const state=await mock(page,makeLesson(),{progress:true});await start(page);await expect(page.getByTestId('job-stage')).toHaveText('ready',{timeout:10000});expect(state.connections()).toBeGreaterThanOrEqual(2);await page.reload();await expect(page.getByRole('button',{name:'Play',exact:true})).toBeVisible();expect(state.creates()).toBe(1);
+  const state=await mock(page,makeLesson(),{progress:true});await start(page);await expect(page.getByTestId('job-stage')).toHaveText('Reading video transcripts');await expect(page.locator('.progress-card')).toHaveCount(0,{timeout:10000});expect(state.connections()).toBeGreaterThanOrEqual(2);await page.reload();await expect(page.getByRole('button',{name:'Play',exact:true})).toBeVisible();expect(state.creates()).toBe(1);
 });
 test('three-field form submits without sources or manual entry',async({page})=>{
   const state=await mock(page,makeLesson(),{emptySources:true});await page.goto('/');
@@ -176,7 +176,7 @@ test('three-field form submits without sources or manual entry',async({page})=>{
   await page.getByRole('button',{name:'Hide sources pane'}).click();await expect(page.getByRole('checkbox')).toHaveCount(0);await expect(page.getByRole('button',{name:/Import|Search YouTube/})).toHaveCount(0);await expect(page.getByLabel('Transcript text')).toHaveCount(0);
 });
 test('source setup failure keeps retry and offers no source fallback',async({page})=>{
-  await mock(page,makeLesson(),{sourceFailure:true});await page.goto('/');await page.getByLabel('Learning goal').fill('Database indexes');await page.getByRole('button',{name:'Create my lesson'}).click();await expect(page.getByRole('alert')).toContainText('YOUTUBE_API_KEY');await expect(page.getByTestId('job-stage')).toHaveText('Searching YouTube');await expect(page.getByRole('button',{name:'Import source',exact:true})).toHaveCount(0);await page.getByRole('button',{name:'Retry',exact:true}).click();await expect(page.getByRole('button',{name:'Play',exact:true})).toBeVisible();
+  await mock(page,makeLesson(),{sourceFailure:true});await page.goto('/');await page.getByLabel('Learning goal').fill('Database indexes');await page.getByRole('button',{name:'Create my lesson'}).click();await expect(page.getByRole('alert')).toContainText('YOUTUBE_API_KEY');await expect(page.getByRole('button',{name:'Import source',exact:true})).toHaveCount(0);await page.getByRole('button',{name:'Retry',exact:true}).click();await expect(page.getByRole('button',{name:'Play',exact:true})).toBeVisible();
 });
 test('saved imported lesson opens without creating a lesson or changing its source label',async({page})=>{
   const lesson=makeLesson();lesson.request.source_mode='import';lesson.request.source_ids=['src_test'];Object.assign(lesson.sources[0],{source_type:'import',title:'Saved manual transcript',transcript_provider:null,channel:null,video_id:null,url:null});
@@ -335,16 +335,6 @@ test('settled arrows and paused instructional states do not move; role changes r
   await page.waitForTimeout(250);expect(await page.locator('.diagram').evaluate(e=>e.outerHTML)).toBe(markup);
 });
 
-test('ready-ahead is contiguous, excludes practice, and updates on seek and jumps',async({page})=>{
-  const lesson=makeLesson();lesson.shorts.push(makeShort('three'));lesson.short_ids.push('three');lesson.shorts[1].status='queued';lesson.shorts[0].question_required=true;
-  await mock(page,lesson);await start(page);
-  await expect(page.getByTestId('ready-ahead')).toContainText('Next 0 shorts ready');await expect(page.getByTestId('ready-ahead')).toContainText('0:30 contiguous');
-  await expect(page.getByTestId('client-preload')).toContainText('browser: 0');await expect(page.getByRole('button',{name:'Next short',exact:true})).toBeDisabled();
-  await seekAudio(page,20000);await expect(page.getByTestId('ready-ahead')).toContainText('0:10 contiguous');
-  await page.locator('.outline-item').nth(2).click();await expect(page.locator('.player h2')).toHaveText('Understand an index three');await expect(page.getByTestId('ready-ahead')).toContainText('0:30 contiguous');
-  await expect(page.getByRole('button',{name:'Previous short',exact:true})).toBeDisabled();
-});
-
 test('preload window is bounded to two ready shorts and releases blobs on selection and exit',async({page})=>{
   await page.addInitScript(()=>{
     const original=URL.createObjectURL,release=URL.revokeObjectURL,fetchOriginal=window.fetch;
@@ -353,9 +343,9 @@ test('preload window is bounded to two ready shorts and releases blobs on select
     window.fetch=(input,init)=>{if(String(input).includes('/api/audio/'))stats.requests.push(String(input));return fetchOriginal(input,init);};
   });
   const lesson=makeLesson();lesson.shorts.push(makeShort('three'),makeShort('four'));lesson.short_ids.push('three','four');lesson.shorts.forEach((s,i)=>s.audio_path=`${'abcd'[i].repeat(64)}.wav`);
-  await mock(page,lesson);await start(page);await expect(page.getByTestId('client-preload')).toContainText('browser: 2');
+  await mock(page,lesson);await start(page);await expect(page.locator('.lesson-grid')).toHaveAttribute('data-preloaded','2');
   let stats=await page.evaluate(()=>(window as any).preloadStats);expect(stats.requests).toHaveLength(2);expect(stats.requests.some((s:string)=>s.includes('d'.repeat(64)))).toBe(false);
-  await page.getByRole('button',{name:'Next short',exact:true}).click();await expect(page.getByTestId('client-preload')).toContainText('browser: 2');
+  await page.getByRole('button',{name:'Next short',exact:true}).click();await expect(page.locator('.lesson-grid')).toHaveAttribute('data-preloaded','2');
   await expect.poll(()=>page.evaluate(()=>(window as any).preloadStats.released)).toBeGreaterThanOrEqual(2);
   await page.getByRole('button',{name:'Library',exact:true}).click();await expect.poll(()=>page.evaluate(()=>{const s=(window as any).preloadStats;return s.created-s.released;})).toBe(0);
 });
@@ -384,20 +374,19 @@ test('essential upcoming images must decode before client preload is reported re
   const lesson=makeLesson();const mixed=JSON.parse(readFileSync(new URL('../../fixtures/mixed-visuals.json',import.meta.url),'utf8'));
   lesson.shorts[1]={...mixed.shorts[2],id:'two',audio_path:'b'.repeat(64)+'.wav'};
   await mock(page,lesson);await start(page);
-  await expect(page.getByTestId('ready-ahead')).toContainText('Next 1 short ready');
   // The mock deliberately has no asset route: missing image must not be hidden by ready audio.
-  await expect(page.getByTestId('client-preload')).toContainText('could not be preloaded');await expect(page.getByTestId('client-preload')).toContainText('browser: 0');
+  await expect(page.locator('.lesson-grid')).toHaveAttribute('data-preload-failed','1');await expect(page.locator('.lesson-grid')).toHaveAttribute('data-preloaded','0');
 });
 
 test('oversized media is not retained by speculative preload',async({page})=>{
   const lesson=makeLesson();lesson.shorts[1].audio_path='b'.repeat(64)+'.wav';await mock(page,lesson);
   await page.route(`**/api/audio/${'b'.repeat(64)}.wav`,route=>route.fulfill({contentType:'audio/wav',headers:{'Content-Length':'4000000'},body:Buffer.alloc(1)}));
-  await start(page);await expect(page.getByTestId('client-preload')).toContainText('could not be preloaded');await expect(page.getByTestId('client-preload')).toContainText('browser: 0');
+  await start(page);await expect(page.locator('.lesson-grid')).toHaveAttribute('data-preload-failed','1');await expect(page.locator('.lesson-grid')).toHaveAttribute('data-preloaded','0');
 });
 
 test('server media loss prevents next preload and surfaces repair rather than an infinite wait',async({page})=>{
   const lesson=makeLesson() as any;lesson.readiness={version:1,ready_short_ids:['one'],missing_media_short_ids:['two'],initial_contiguous_media_ms:30000};
-  await mock(page,lesson);await start(page);await expect(page.getByTestId('ready-ahead')).toContainText('Next 0 shorts ready');await expect(page.getByTestId('client-preload')).toContainText('browser: 0');
+  await mock(page,lesson);await start(page);await expect(page.locator('.lesson-grid')).toHaveAttribute('data-preloaded','0');
   await expect(page.getByRole('alert')).toContainText('Published media is missing');await expect(page.getByRole('button',{name:'Repair missing media',exact:true})).toBeVisible();
 });
 
@@ -407,7 +396,7 @@ test('cancel stops inflight prefetch and preserves completed playback',async({pa
   let resolve:(()=>void)|undefined;const pending=new Promise<void>(done=>resolve=done);let requested=false;
   await page.route(`**/api/audio/${'b'.repeat(64)}.wav`,async route=>{requested=true;await pending;await route.abort().catch(()=>{});});
   await start(page);await expect.poll(()=>requested).toBe(true);await page.getByRole('button',{name:'Cancel preparation',exact:true}).click();
-  await expect(page.getByTestId('job-stage')).toHaveText('cancelled');resolve!();await expect(page.getByTestId('client-preload')).toContainText('browser: 0');await expect(page.locator('.player h2')).toHaveText('Understand an index one');
+  await expect(page.getByRole('button',{name:'Retry',exact:true})).toBeVisible();resolve!();await expect(page.locator('.lesson-grid')).toHaveAttribute('data-preloaded','0');await expect(page.locator('.player h2')).toHaveText('Understand an index one');
 });
 
 test('autoplay blocking is actionable and not a corrupt audio error',async({page})=>{
@@ -565,11 +554,11 @@ test('a stopped lesson rates after its last ready short; a running lesson has no
   await expect(page.getByRole('button',{name:'Next short'})).toBeDisabled();await expect(page.locator('.outline-item',{hasText:'Rate this lesson'})).toHaveCount(0);
 });
 
-test('nothing sits below the player: no captions, transcript or readiness text; readiness lives in the Sources pane',async({page})=>{
+test('nothing sits below the player and no readiness statistics are shown anywhere',async({page})=>{
   await mock(page);await start(page);
   await expect(page.locator('.player-area > :not(.shorts-view)')).toHaveCount(0);
   await expect(page.getByTestId('captions')).toHaveCount(0);await expect(page.getByRole('button',{name:/captions/i})).toHaveCount(0);await expect(page.getByText('Full transcript')).toHaveCount(0);
-  await expect(page.locator('#lesson-details').getByTestId('ready-ahead')).toContainText('Next 1 short ready');await expect(page.locator('#lesson-details').getByTestId('client-preload')).toBeVisible();
+  await expect(page.getByText(/shorts? ready|contiguous server-ready media|decode-checked/)).toHaveCount(0);await expect(page.locator('#lesson-details .progress-card')).toHaveCount(0);
 });
 
 test('one trackpad flick moves one short; a new flick during momentum moves again; wheel over the short never scrolls the page',async({page})=>{
@@ -608,4 +597,61 @@ test('phones get a full-screen short with floating actions, a bottom nav and Sou
   const box=await sheet.boundingBox();expect(Math.round(box!.y+box!.height)).toBe(844);expect(box!.width).toBe(390);
   await page.getByRole('button',{name:'Close sources'}).click();await expect(sheet).toBeHidden();
   await page.getByRole('button',{name:'Show sources pane'}).click();await page.locator('.sheet-backdrop').click({position:{x:20,y:20}});await expect(sheet).toBeHidden();
+});
+
+test('Sources opens a reel of the cited YouTube chunks and returns to the short',async({page})=>{
+  // No live YouTube here: the reel lists clips and explains that playback needs internet access.
+  await page.route('https://www.youtube.com/**',route=>route.abort());
+  await mock(page);await start(page);
+  await page.getByRole('button',{name:'Watch source clips'}).click();
+  await expect(page.locator('audio')).toHaveCount(0);
+  // Both fixture shorts cite the same caption segment, so it plays once, credited to both.
+  await expect(page.locator('.reel-item')).toHaveCount(1);
+  await expect(page.locator('.reel-group')).toHaveText('01 · Understand an index one  +  02 · Understand an index two');
+  await expect(page.locator('.reel-now h2')).toHaveText('Index video fixture');
+  await expect(page.locator('.reel-time')).toContainText('0:00 / 0:04 · clip 1 of 1');
+  await expect(page.locator('.reel-overlay')).toContainText('Source clips need internet access');
+  await expect(page.getByRole('link',{name:'Open on YouTube'}).first()).toHaveAttribute('href','https://www.youtube.com/watch?v=testvideo01&t=12s');
+  await page.getByRole('button',{name:'Back to short'}).click();
+  await expect(page.locator('.player h2')).toHaveText('Understand an index one');
+  await expect(page.getByRole('button',{name:'Play',exact:true})).toBeVisible();
+});
+
+// A planned segment the failed short never got to cite.
+function withPlannedSegment(lesson:any){
+  lesson.sources[0].segments.push({id:'seg_b',source_id:'src_test',text:'Without an index the planner scans every row.',start_ms:40000,end_ms:47000});
+  lesson.objectives=[{concept_id:'c_two',title:'Understand an index two',learning_outcome:null,teaching_role:'mechanism',dependency_ids:[],relevance:'core',evidence_segment_ids:['seg_b'],curriculum_role:'core',target_duration_ms:30000}];
+  return lesson;
+}
+test('a short that failed to generate offers the source reel from its planned segments',async({page})=>{
+  await page.route('https://www.youtube.com/**',route=>route.abort());
+  const lesson=withPlannedSegment(makeLesson());
+  lesson.shorts[1]={...lesson.shorts[1],status:'failed',concept_id:'c_two',evidence_references:[],audio_path:null,measured_duration_ms:0};
+  lesson.job={...lesson.job,status:'failed',error:{code:'MODEL_JSON_FAILED',message:'Short 2 could not be written.'}};
+  await mock(page,lesson,{saved:true});await page.goto('/');
+  await page.getByRole('button',{name:'Library'}).click();await page.getByRole('button',{name:'Open lesson'}).first().click();
+  await page.locator('.outline-item').filter({hasText:'Understand an index two'}).click();
+  await expect(page.locator('.preparing-player')).toContainText('GENERATION FAILED');
+  await expect(page.locator('.preparing-player h2')).toHaveText('This short couldn’t be generated.');
+  await page.locator('.preparing-player').getByRole('button',{name:'Watch source clips'}).click();
+  await expect(page.locator('.reel-item')).toHaveCount(2);
+  await expect(page.locator('.reel-time')).toContainText('0:00 / 0:07 · clip 2 of 2');
+  await expect(page.locator('.reel-now blockquote')).toHaveText('Without an index the planner scans every row.');
+  await page.getByRole('button',{name:'Back to short'}).click();
+  await expect(page.locator('.preparing-player h2')).toHaveText('This short couldn’t be generated.');
+  await expect(page.getByRole('button',{name:'Watch the source clips instead'})).toBeVisible();
+});
+test('a lesson that failed before any short was written still offers its planned source clips',async({page})=>{
+  await page.route('https://www.youtube.com/**',route=>route.abort());
+  const lesson=withPlannedSegment(makeLesson());
+  Object.assign(lesson,{status:'failed',shorts:[],short_ids:[],job:{...lesson.job,status:'failed',error:{code:'MODEL_JSON_FAILED',message:'The lesson plan could not be written.'}}});
+  await mock(page,lesson,{saved:true});await page.goto('/');
+  await page.getByRole('button',{name:'Library'}).click();await page.getByRole('button',{name:'Open lesson'}).first().click();
+  await expect(page.locator('.preparing-player h2')).toHaveText('This lesson couldn’t be generated.');
+  await expect(page.getByRole('alert').filter({hasText:'The lesson plan could not be written.'})).toBeVisible();
+  await page.getByRole('button',{name:'Watch the source clips instead'}).click();
+  await expect(page.locator('.reel-group')).toHaveText('01 · Understand an index two');
+  await expect(page.locator('.reel-now h2')).toHaveText('Index video fixture');
+  await page.getByRole('button',{name:'Back to short'}).click();
+  await expect(page.locator('.preparing-player .primary')).toHaveText('Watch source clips');
 });
