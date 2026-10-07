@@ -97,7 +97,7 @@ test('library replaces sidebar sources and create, and branding has no Local lab
   await mock(page,makeLesson(),{saved:true});await page.goto('/');
   const nav=page.getByRole('navigation',{name:'Main navigation'});
   await expect(nav.getByRole('button')).toHaveCount(2);await expect(nav.getByRole('button',{name:'Sources'})).toHaveCount(0);await expect(nav.getByRole('button',{name:'Create'})).toHaveCount(0);
-  await expect(page.locator('.brand')).toHaveText('FocusPlay');await expect(page.locator('.local-status')).toHaveCount(0);
+  await expect(page.locator('.brand')).toHaveText('YouTube');await expect(nav.getByRole('button',{name:'Focus Play',exact:true})).toHaveClass(/nav-active/);await expect(page).toHaveTitle('Focus Play - YouTube');await expect(page.locator('.local-status')).toHaveCount(0);
   await nav.getByRole('button',{name:'Library',exact:true}).click();await expect(page.getByRole('heading',{name:'Your library'})).toBeVisible();await expect(page.locator('.library-short')).toHaveCount(2);
   await page.locator('.library-short').nth(1).click();await expect(page.locator('.player h2')).toHaveText('Understand an index two');await expect.poll(()=>page.locator('audio').evaluate((a:HTMLAudioElement)=>a.paused)).toBe(false);
   await page.getByRole('button',{name:'Library',exact:true}).click();await page.reload();await page.getByRole('button',{name:'Library',exact:true}).click();await expect(page.locator('.library-short')).toHaveCount(2);
