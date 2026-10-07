@@ -1,5 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { readFileSync, writeFileSync } from 'node:fs';
+// The kicker names the current beat, so it is the visible narration clock.
+const kicker=(beat:number,count:number)=>new RegExp(`^${String(beat).padStart(2,'0')} / ${String(count).padStart(2,'0')}`);
 const compiledStoryboard=JSON.parse(readFileSync(new URL('../../fixtures/storyboard-lookup-playback.json',import.meta.url),'utf8'));
 function storyboardLesson(){const lesson=makeLesson();lesson.shorts[0]={...structuredClone(compiledStoryboard),id:'one'};return lesson;}
 async function seekAudio(page:Page,ms:number){
@@ -120,7 +122,11 @@ test('wheel gestures switch shorts once, start narration, and respect feed bound
   await wheel(15);await expect(page.locator('.player h2')).toHaveText('Understand an index one');await wheel(30);await wheel(80);await expect(page.locator('.player h2')).toHaveText('Understand an index two');
   await expect.poll(()=>page.locator('audio').evaluate((a:HTMLAudioElement)=>a.paused)).toBe(false);await expect.poll(()=>page.locator('audio').evaluate((a:HTMLAudioElement)=>a.currentTime)).toBeGreaterThan(0);
   await wheel(-60);await expect(page.locator('.player h2')).toHaveText('Understand an index one');await wheel(-60);await expect(page.locator('.player h2')).toHaveText('Understand an index one');
-  await page.locator('.player').focus();await page.keyboard.press('ArrowDown');await expect(page.locator('.player h2')).toHaveText('Understand an index two');await page.keyboard.press('ArrowDown');await expect(page.locator('.player h2')).toHaveText('Understand an index three');await page.keyboard.press('ArrowDown');await expect(page.locator('.player h2')).toHaveText('Understand an index three');
+  await page.locator('.player').focus();await page.keyboard.press('ArrowDown');await expect(page.locator('.player h2')).toHaveText('Understand an index two');await page.keyboard.press('ArrowDown');await expect(page.locator('.player h2')).toHaveText('Understand an index three');
+  // A finished lesson ends with the rating slide; it is the bottom of the feed.
+  await page.keyboard.press('ArrowDown');const rating=page.getByTestId('rating-slide');await expect(rating).toBeVisible();await expect(page.locator('audio')).toHaveCount(0);
+  await rating.focus();await page.keyboard.press('ArrowDown');await expect(rating).toBeVisible();await wheel(80);await expect(rating).toBeVisible();
+  await page.keyboard.press('ArrowUp');await expect(page.locator('.player h2')).toHaveText('Understand an index three');
 });
 test('vertical swipes navigate on mobile and horizontal gestures do not',async({page})=>{
   await page.setViewportSize({width:390,height:844});await mock(page);await start(page);
@@ -137,17 +143,17 @@ test('like and dislike are mutually exclusive, toggleable and saved per short',a
   await page.getByRole('button',{name:'Next short'}).click();await expect(like).toHaveAttribute('aria-pressed','false');await dislike.click();await page.getByRole('button',{name:'Previous short'}).click();await expect(like).toHaveAttribute('aria-pressed','true');await page.reload();await expect(like).toHaveAttribute('aria-pressed','true');
 });
 
-test('play, pause, seek, captions and diagrams share the audio clock',async({page})=>{
+test('play, pause, seek, beat kicker and diagrams share the audio clock',async({page})=>{
   await mock(page);await start(page);await expect(page.getByTestId('node-row')).toHaveCount(0);
   await page.getByRole('button',{name:'Play',exact:true}).click();await expect(page.getByRole('button',{name:'Pause',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Pause',exact:true}).click();const audio=page.locator('audio');expect(await audio.evaluate((a:HTMLAudioElement)=>a.paused)).toBe(true);
-  const seek=page.getByLabel('Seek within short');await seek.fill('20000');await expect(page.getByTestId('captions')).toHaveText('The planner can still choose a scan.');await expect(page.getByTestId('node-row')).toBeVisible();await expect(page.getByTestId('connection-edge')).toHaveCount(1);
+  const seek=page.getByLabel('Seek within short');await seek.fill('20000');await expect(page.locator('.player-kicker')).toHaveText(kicker(2,2));await expect(page.getByTestId('node-row')).toBeVisible();await expect(page.getByTestId('connection-edge')).toHaveCount(1);
   expect(await audio.evaluate((a:HTMLAudioElement)=>a.currentTime)).toBeCloseTo(20,0);
-  await seek.fill('0');await expect(page.getByTestId('captions')).toHaveText('An index maps keys to rows.');await expect(page.getByTestId('node-row')).toHaveCount(0);
+  await seek.fill('0');await expect(page.locator('.player-kicker')).toHaveText(kicker(1,2));await expect(page.getByTestId('node-row')).toHaveCount(0);
   await page.getByRole('button',{name:'Next short'}).click();await expect(page.locator('.player h2')).toHaveText('Understand an index two');await page.getByRole('button',{name:'Previous short'}).click();await expect(page.locator('.player h2')).toHaveText('Understand an index one');
 });
 test('refresh restores selected short and seek position without starting audio',async({page})=>{
-  await mock(page);await start(page);await page.getByRole('button',{name:'Next short'}).click();await page.getByLabel('Seek within short').fill('18000');await page.reload();await expect(page.locator('.player h2')).toHaveText('Understand an index two');await expect(page.getByTestId('captions')).toHaveText('The planner can still choose a scan.');expect(await page.locator('audio').evaluate((a:HTMLAudioElement)=>a.paused)).toBe(true);
+  await mock(page);await start(page);await page.getByRole('button',{name:'Next short'}).click();await page.getByLabel('Seek within short').fill('18000');await page.reload();await expect(page.locator('.player h2')).toHaveText('Understand an index two');await expect(page.locator('.player-kicker')).toHaveText(kicker(2,2));expect(await page.locator('audio').evaluate((a:HTMLAudioElement)=>a.paused)).toBe(true);
 });
 test('progress and reconnection recover snapshots without a second create request',async({page})=>{
   const state=await mock(page,makeLesson(),{progress:true});await start(page);await expect(page.getByTestId('job-stage')).toHaveText('ready',{timeout:10000});expect(state.connections()).toBeGreaterThanOrEqual(2);await page.reload();await expect(page.getByRole('button',{name:'Play',exact:true})).toBeVisible();expect(state.creates()).toBe(1);
@@ -187,9 +193,9 @@ for(const reduced of [false,true])test(`compiled storyboard boundaries, state ch
   await seekAudio(page,5999);await expect(page.getByTestId('node-node_1')).toContainText('Candidate row');
   await seekAudio(page,6000);await expect(page.getByTestId('node-node_1')).toContainText('Matching row');await expect(page.getByTestId('node-node_1')).toHaveAttribute('data-focused','true');
   await seekAudio(page,13999);await expect(page.locator('.diagram')).toHaveAttribute('data-scene-id','scene_0');
-  await seekAudio(page,14000);await expect(page.locator('.diagram')).toHaveAttribute('data-scene-id','scene_1');await expect(page.getByTestId('captions')).toHaveText(compiledStoryboard.narration_units[2].text);await expect(page.getByTestId('node-node_0')).toContainText('Index key');await expect(page.getByTestId('connection-conn_0')).toHaveCount(1);
+  await seekAudio(page,14000);await expect(page.locator('.diagram')).toHaveAttribute('data-scene-id','scene_1');await expect(page.locator('.player-kicker')).toHaveText(kicker(3,compiledStoryboard.narration_units.length));await expect(page.getByTestId('node-node_0')).toContainText('Index key');await expect(page.getByTestId('connection-conn_0')).toHaveCount(1);
   await seekAudio(page,22000);await expect(page.getByTestId('node-node_0')).toContainText('Storage and updates');
-  await seekAudio(page,30000);await expect(page.locator('.diagram')).toHaveAttribute('data-scene-id','scene_1');await expect(page.getByTestId('captions')).toHaveText(compiledStoryboard.narration_units[3].text);
+  await seekAudio(page,30000);await expect(page.locator('.diagram')).toHaveAttribute('data-scene-id','scene_1');await expect(page.locator('.player-kicker')).toHaveText(kicker(4,compiledStoryboard.narration_units.length));
   await seekAudio(page,1000);await expect(page.locator('.diagram')).toHaveAttribute('data-scene-id','scene_0');await expect(page.getByTestId('node-node_1')).toContainText('Candidate row');await expect(page.getByTestId('node-node_0')).toHaveAttribute('data-focused','true');await expect(page.getByTestId('connection-conn_0')).toHaveCount(0);
 });
 
@@ -230,7 +236,7 @@ test('storyboard loops reset visuals and refresh restores the active scene while
   await mock(page,storyboardLesson());await start(page);await seekAudio(page,23000);await expect(page.getByTestId('node-node_0')).toContainText('Storage and updates');
   // Native audio seeks and the visible control both persist the audio clock.
   await page.reload();await expect(page.locator('.diagram')).toHaveAttribute('data-scene-id','scene_1');await expect(page.getByTestId('node-node_0')).toContainText('Storage and updates');expect(await page.locator('audio').evaluate((a:HTMLAudioElement)=>a.paused)).toBe(true);
-  await page.locator('audio').evaluate(async(a:HTMLAudioElement)=>{a.currentTime=29.8;a.playbackRate=4;await a.play();});await expect(page.locator('.diagram')).toHaveAttribute('data-scene-id','scene_0');await expect(page.getByTestId('node-node_1')).toContainText('Candidate row');await expect(page.getByTestId('captions')).toHaveText(compiledStoryboard.narration_units[0].text);
+  await page.locator('audio').evaluate(async(a:HTMLAudioElement)=>{a.currentTime=29.8;a.playbackRate=4;await a.play();});await expect(page.locator('.diagram')).toHaveAttribute('data-scene-id','scene_0');await expect(page.getByTestId('node-node_1')).toContainText('Candidate row');await expect(page.locator('.player-kicker')).toHaveText(kicker(1,compiledStoryboard.narration_units.length));
 });
 
 for(const width of [1280,390])test(`storyboard screenshots at meaningful beats, width ${width}`,async({page})=>{
@@ -282,12 +288,7 @@ for(const width of [320,390,1280])for(const zoom of [1,2])test(`long presentatio
   await expect.poll(async()=> (await geometry()).minSize).toBeGreaterThanOrEqual(14*zoom-.1);
   const measured=await geometry();writeFileSync(`test-results/presentation-long-${width}-${zoom}.json`,JSON.stringify({width,zoom,...measured},null,2));expect(measured.fits).toBe(true);expect(measured.label).toBe(node.label.replace(/\s/g,''));expect(measured.detail).toBe(node.detail.replace(/\s/g,''));
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
-  const captions=page.getByTestId('captions');await expect(captions).toHaveText(s.narration_units[0].text);
-  expect(await captions.evaluate(e=>e.scrollHeight>e.clientHeight)).toBe(true);
-  await captions.hover();await page.mouse.wheel(0,160);await expect.poll(()=>captions.evaluate(e=>e.scrollTop)).toBeGreaterThan(0);await expect(page.locator('.player h2')).toHaveText(s.objective);
-  await page.getByRole('button',{name:'Hide captions'}).click();await expect(captions).toBeHidden();await page.getByText('Full transcript',{exact:true}).click();await expect(page.locator('.short-transcript')).toContainText(s.narration_units[0].text);
-  await page.getByRole('button',{name:'Seek to narration beat 2'}).click();await expect.poll(()=>page.locator('audio').evaluate((a:HTMLAudioElement)=>a.currentTime)).toBe(15);
-  await page.getByRole('button',{name:'Show captions'}).click();await expect(captions).toHaveText(s.narration_units[1].text);
+  await expect(page.locator('.player h2')).toHaveText(s.objective);await expect(page.getByTestId('captions')).toHaveCount(0);await expect(page.locator('.short-transcript')).toHaveCount(0);
   await page.locator('.player').screenshot({path:`test-results/presentation-long-${width}-${zoom}.png`,style:'.topbar{visibility:hidden}'});
 });
 
@@ -305,16 +306,15 @@ for(const template of ['comparison','key_fact'])for(const width of [320,390,1280
   await page.locator('.player').screenshot({path:`test-results/presentation-dense-${template}-${width}.png`,style:'.topbar{visibility:hidden}'});
 });
 
-test('caption and transcript text are escaped without live announcements',async({page})=>{
+test('source, diagram and narration text cannot inject markup',async({page})=>{
   const lesson=makeLesson();lesson.shorts[0].narration_units[0].text='<img src=x onerror="window.injected=true"> A safe spoken phrase.';
   lesson.sources[0].title='<svg onload="window.injected=true">Source label</svg>';
   lesson.shorts[0].scenes[0].nodes[0].detail='<img src=x onerror="window.injected=true">';
-  await mock(page,lesson);await start(page);await page.getByText('Full transcript',{exact:true}).click();
+  await mock(page,lesson);await start(page);
   await expect(page.locator('.evidence-list')).toContainText(lesson.sources[0].title);
   await expect(page.locator('.diagram')).toHaveAttribute('aria-label',/onerror/);
   await expect(page.locator('.evidence-list svg[onload],.diagram img')).toHaveCount(0);
-  await expect(page.getByTestId('captions')).toHaveAttribute('aria-live','off');await expect(page.locator('.captions img,.short-transcript img')).toHaveCount(0);
-  await expect(page.locator('.short-transcript')).toContainText('<img src=x');expect(await page.evaluate(()=>('injected' in window))).toBe(false);
+  await expect(page.locator('.player img:not(.cover-photo img)')).toHaveCount(0);expect(await page.evaluate(()=>('injected' in window))).toBe(false);
 });
 
 test('settled arrows and paused instructional states do not move; role changes retain entity identity',async({page})=>{
@@ -409,17 +409,158 @@ test('autoplay blocking is actionable and not a corrupt audio error',async({page
   await expect(page.getByRole('alert')).toContainText('Your browser blocked autoplay. Click Play');await expect(page.getByRole('alert')).not.toContainText('file');await expect(page.getByRole('button',{name:'Play',exact:true})).toBeEnabled();
 });
 
-test('diagram text and captions meet AA contrast; focus is visible and answer stays after backward seek',async({page})=>{
+test('diagram text meets AA contrast; focus is visible and answer stays after backward seek',async({page})=>{
   const lesson=makeLesson();(lesson.shorts[0] as any).question={prompt:'Where does the key lead?',options:['A row','A server'],answer_index:0,explanation:'An index key locates the matching row.',evidence,allowance_ms:20000};
   await mock(page,lesson);await start(page);await page.getByLabel('Seek within short').fill('30000');
   const ratios=await page.locator('.diagram').evaluate(svg=>{
     const rgb=(color:string)=>color.match(/[\d.]+/g)!.slice(0,3).map(Number);
     const lum=(color:string)=>rgb(color).map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;}).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0);
     const contrast=(a:string,b:string)=>(Math.max(lum(a),lum(b))+.05)/(Math.min(lum(a),lum(b))+.05);
-    const values=[...svg.querySelectorAll('g[data-testid^="node-"]')].flatMap(g=>[...g.querySelectorAll('text')].map(t=>contrast(getComputedStyle(t).fill,getComputedStyle(g.querySelector('rect')!).fill)));
-    const caption=document.querySelector('.captions')!,style=getComputedStyle(caption);values.push(contrast(style.color,style.backgroundColor));return values;
+    const values=[...svg.querySelectorAll('g[data-testid^="node-"]')].flatMap(g=>[...g.querySelectorAll('text')].map(t=>contrast(getComputedStyle(t).fill,getComputedStyle(g.querySelector('rect.node-card')!).fill)));
+    return values;
   });writeFileSync('test-results/presentation-contrast.json',JSON.stringify({ratios,minimum:Math.min(...ratios)},null,2));expect(Math.min(...ratios)).toBeGreaterThanOrEqual(4.5);
   await page.keyboard.press('Tab');await page.locator('.diagram-frame').focus();expect(await page.locator('.diagram-frame').evaluate(e=>getComputedStyle(e).outlineStyle)).toBe('solid');
   await page.getByRole('button',{name:'A row',exact:true}).click();await expect(page.getByRole('button',{name:'A row',exact:true})).toHaveAttribute('aria-pressed','true');
   await seekAudio(page,1000);await expect(page.locator('.question')).toBeVisible();await expect(page.locator('.question [role=status]')).toContainText('Correct.');
+});
+
+// Compact storyboards as the backend shapes them: one diagram scene; beat i reveals and focuses node_i
+// and draws edges whose later endpoint is i. Synthetic fixture only; it is served by the route mock.
+const coverPhoto={alt:'A card catalogue drawer',query:'library index',asset:{id:'c'.repeat(64),content_hash:'c'.repeat(64),kind:'image',mime_type:'image/png',byte_size:1000,width:480,height:848,original_source:'generated:test',creator:'Test fixture',permission_basis:'Original test fixture image.',attribution:'AI-generated image · test fixture',license_url:null,acquired_at:0,managed_filename:'cover.png',source_context:'test',illustrative:true,status:'ready'}};
+const storyLabels=[['Search key','The value you look up'],['Index entry','Sorted key with a row pointer'],['Row pointer','Where the row is stored'],['Table row','The matching data'],['Planner','Picks index or scan'],['Statistics','How selective the key is'],['Cache','Hot pages stay in memory'],['Result','Rows returned to you']];
+function compactShort(id:string,template:string,count:number,{cover=true,outcome=true}={}){
+  const beat=30000/count,units=Array.from({length:count},(_,i)=>({beat_id:`beat_${i}`,scene_id:'scene_0',purpose:`Explain ${storyLabels[i][0]}`,text:`Beat ${i+1}: ${storyLabels[i][1]}.`,evidence,start_ms:i*beat,end_ms:(i+1)*beat}));
+  const pairs=['process','steps','example','timeline','cycle'].includes(template)?units.slice(1).map((_,i)=>[i,i+1]):[];
+  const connections=pairs.map(([a,b],i)=>({id:`conn_${i}`,source:`node_${a}`,target:`node_${b}`}));
+  const actions=units.flatMap((u,i)=>[{kind:'appear',target:`node_${i}`,at_ms:u.start_ms,beat_id:u.beat_id,to_slot:null},{kind:'highlight',target:`node_${i}`,at_ms:u.start_ms,beat_id:u.beat_id,to_slot:null},...(i?connections.filter(c=>c.target===`node_${i}`).map(c=>({kind:'draw',target:c.id,at_ms:u.start_ms,beat_id:u.beat_id,to_slot:null})):[])]);
+  return {...makeShort(id,template),storyboard_version:2,timeline_compiler_version:'test',objective:`Follow an index lookup ${id}`,learning_outcome:outcome?'Trace a search key to its row':null,cover:cover?coverPhoto:null,narration_units:units,
+    scenes:[{id:'scene_0',kind:'diagram',summary:'How an index lookup finds a row',template,evidence_references:[evidence],start_ms:0,end_ms:30000,beat_ids:units.map(u=>u.beat_id),states:[],connections,actions,
+      nodes:units.map((_,i)=>({id:`node_${i}`,slot:i,label:storyLabels[i][0],detail:storyLabels[i][1],icon:['key','search','route','table','cog','gauge','database','circle-check'][i],role:i?i===count-1?'result':'step':'start',shape:'box',value:null}))}]};
+}
+async function storyLesson(page:Page,shorts:any[]){
+  const lesson=makeLesson();lesson.shorts=shorts;lesson.short_ids=shorts.map(s=>s.id);await mock(page,lesson);
+  const image=readFileSync(new URL('../../fixtures/assets/lookup-illustration.png',import.meta.url));
+  await page.route(`**/api/assets/${coverPhoto.asset.id}`,route=>route.fulfill({contentType:'image/png',body:image}));
+  await start(page);
+}
+const storyMarkup=(page:Page)=>page.locator('.story-stage').evaluate(e=>e.outerHTML);
+
+test('story phases follow the audio clock: photo setup, one card at a time, overview, takeaway, and seek back',async({page})=>{
+  await page.emulateMedia({reducedMotion:'reduce'});await storyLesson(page,[compactShort('one','process',4)]);
+  // Beat 1 belongs to the cover photo, with the first item as a lower-third card and no strip yet.
+  await expect(page.locator('.cover-photo')).toHaveClass(/polaroid/);await expect(page.locator('.player')).toHaveClass(/ photo/);
+  await expect(page.getByTestId('node-node_0')).toHaveClass(/story-lower/);await expect(page.getByTestId('node-node_0')).toContainText('Search key');
+  await expect(page.locator('.story-strip')).toHaveCount(0);await expect(page.locator('.diagram')).toHaveCount(0);
+  await seekAudio(page,7499);await expect(page.locator('.cover-photo')).toHaveClass(/polaroid/);
+  // Beat 2: sticker, hero card for item 2, covered item 1 in the strip, the rest as placeholders.
+  await seekAudio(page,8000);await expect(page.locator('.cover-photo')).toHaveClass(/sticker/);await expect(page.locator('.player')).not.toHaveClass(/ photo/);
+  const hero=page.getByTestId('node-node_1');await expect(hero).toHaveClass(/story-hero/);await expect(hero).toHaveAttribute('data-focused','true');await expect(hero).toContainText('Index entry');await expect(hero).toContainText('2 of 4');
+  await expect(page.getByTestId('node-node_0')).toHaveCount(0);
+  await expect(page.locator('.story-strip li')).toHaveCount(4);
+  expect(await page.locator('.story-strip li').evaluateAll(items=>items.map(i=>i.getAttribute('data-status')))).toEqual(['done','current','next','next']);
+  await expect(page.getByRole('list',{name:'Progress: item 2 of 4'})).toBeVisible();await expect(page.getByTestId('chip-0')).toHaveAttribute('aria-label','1: Search key, covered');await expect(page.getByTestId('chip-2')).toHaveAttribute('aria-label','3: coming up');
+  await expect(page.getByRole('group',{name:/Story view, item 2 of 4/})).toBeVisible();
+  await expect(page.locator('.hero-stage .sr-only')).toHaveText('process diagram: Search key: The value you look up; Index entry: Sorted key with a row pointer');
+  const contrast=await hero.evaluate(card=>{
+    const rgb=(color:string)=>color.match(/[\d.]+/g)!.slice(0,3).map(Number);
+    const lum=(color:string)=>rgb(color).map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;}).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0);
+    const background=getComputedStyle(card).backgroundColor;
+    return Math.min(...[...card.querySelectorAll('.story-role,.story-label,.story-detail')].map(t=>{const a=lum(getComputedStyle(t).color),b=lum(background);return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);}));
+  });expect(contrast).toBeGreaterThanOrEqual(4.5);
+  const beatTwo=await storyMarkup(page);
+  // Last beat: the whole diagram, nothing dimmed, last item focused; the takeaway waits for the final moments.
+  await seekAudio(page,23000);await expect(page.locator('.diagram-frame.overview')).toBeVisible();await expect(page.locator('.story-strip')).toHaveCount(0);
+  for(let i=0;i<4;i++)await expect(page.getByTestId(`node-node_${i}`)).toBeVisible();
+  await expect(page.getByTestId('node-node_3')).toHaveAttribute('data-focused','true');await expect(page.locator('[data-past=true]')).toHaveCount(0);
+  await expect(page.locator('.diagram')).toHaveAttribute('aria-label',/Search key.*Index entry.*Row pointer.*Table row/);await expect(page.locator('.diagram-tag')).toContainText('The whole picture');
+  await expect(page.getByTestId('takeaway')).toHaveCount(0);
+  await seekAudio(page,26999);await expect(page.getByTestId('takeaway')).toHaveCount(0);
+  await seekAudio(page,27000);await expect(page.getByTestId('takeaway')).toContainText('Now you can');await expect(page.getByTestId('takeaway')).toContainText('Trace a search key to its row');await expect(page.locator('.confetti')).toHaveCount(0);
+  await expect(page.locator('.diagram-frame.overview')).toBeVisible();
+  // Seeking back restores each earlier phase exactly.
+  await seekAudio(page,8000);await expect(page.getByTestId('takeaway')).toHaveCount(0);await expect(page.locator('.diagram')).toHaveCount(0);expect(await storyMarkup(page)).toBe(beatTwo);
+  await seekAudio(page,1000);await expect(page.locator('.cover-photo')).toHaveClass(/polaroid/);await expect(page.getByTestId('node-node_0')).toHaveClass(/story-lower/);
+});
+
+test('without a cover the first beat starts on the hero card, and the loop wraps back to it',async({page})=>{
+  await page.emulateMedia({reducedMotion:'reduce'});await storyLesson(page,[compactShort('one','steps',3,{cover:false,outcome:false})]);
+  await expect(page.locator('.cover-photo')).toHaveCount(0);await expect(page.getByTestId('node-node_0')).toHaveClass(/story-hero/);
+  expect(await page.locator('.story-strip li').evaluateAll(items=>items.map(i=>i.getAttribute('data-status')))).toEqual(['current','next','next']);
+  // Without a learning outcome, the takeaway restates the last item.
+  await seekAudio(page,29000);await expect(page.getByTestId('takeaway')).toContainText('Key takeaway');await expect(page.getByTestId('takeaway')).toContainText('Row pointer — Where the row is stored');
+  await page.locator('audio').evaluate(async(a:HTMLAudioElement)=>{a.currentTime=29.8;a.playbackRate=4;await a.play();});
+  await expect(page.getByTestId('takeaway')).toHaveCount(0);await expect(page.getByTestId('node-node_0')).toHaveClass(/story-hero/);
+});
+
+test('spatial layouts keep the incremental full diagram and still get the photo setup and the ending',async({page})=>{
+  await page.emulateMedia({reducedMotion:'reduce'});await storyLesson(page,[compactShort('one','matrix',4)]);
+  await expect(page.getByTestId('node-node_0')).toHaveClass(/story-lower/);await expect(page.locator('.diagram')).toHaveCount(0);
+  await seekAudio(page,8000);await expect(page.locator('.diagram')).toBeVisible();await expect(page.locator('.story-strip')).toHaveCount(0);
+  await expect(page.getByTestId('node-node_0')).toBeVisible();await expect(page.getByTestId('node-node_1')).toHaveAttribute('data-focused','true');await expect(page.getByTestId('node-node_2')).toHaveCount(0);
+  await seekAudio(page,23000);await expect(page.locator('.diagram-frame.overview')).toBeVisible();await expect(page.getByTestId('node-node_3')).toHaveAttribute('data-focused','true');
+  await seekAudio(page,28000);await expect(page.getByTestId('takeaway')).toBeVisible();
+  await seekAudio(page,8000);await expect(page.locator('.diagram-frame.overview')).toHaveCount(0);await expect(page.getByTestId('node-node_2')).toHaveCount(0);
+});
+
+test('legacy and multi-scene storyboards keep their authored playback',async({page})=>{
+  await page.emulateMedia({reducedMotion:'reduce'});const lesson=storyboardLesson();lesson.shorts[1]=compactShort('two','process',4) as any;await mock(page,lesson);await start(page);
+  await expect(page.locator('.diagram')).toHaveAttribute('data-scene-id','scene_0');await expect(page.locator('.story-stage')).toHaveClass('story-stage');
+  await expect(page.locator('.story-strip,.hero-stage')).toHaveCount(0);await seekAudio(page,30000);await expect(page.getByTestId('takeaway')).toHaveCount(0);await expect(page.locator('.diagram-frame.overview')).toHaveCount(0);
+});
+
+for(const width of [1280,390])test(`eight items: strip, hero card, recap and celebration fit at width ${width}`,async({page})=>{
+  await page.setViewportSize({width,height:900});await storyLesson(page,[compactShort('one','steps',8)]);
+  await seekAudio(page,15000);await expect(page.getByTestId('node-node_4')).toHaveClass(/story-hero/);
+  // Stepping forward one beat flies a copy of the old card into its chip; the copy is decorative and removed.
+  await seekAudio(page,18750);await expect(page.locator('.story-card.ghost')).toHaveCount(1);await expect(page.locator('.story-card.ghost')).toHaveAttribute('aria-hidden','true');
+  await expect(page.getByTestId('node-node_4')).toHaveCount(0);await expect(page.locator('.story-card.ghost')).toHaveCount(0);
+  const fit=await page.locator('.hero-stage').evaluate(stage=>{const s=stage.getBoundingClientRect(),strip=stage.querySelector('.story-strip')!,card=stage.querySelector('.story-hero')!.getBoundingClientRect();
+    return {strip:strip.scrollWidth<=strip.clientWidth+1,card:card.left>=s.left && card.right<=s.right+.5,chips:[...strip.querySelectorAll('.chip-dot')].every(c=>{const r=c.getBoundingClientRect();return r.left>=s.left-1 && r.right<=s.right+1;})};});
+  expect(fit).toEqual({strip:true,card:true,chips:true});
+  await seekAudio(page,26500);await expect(page.locator('.diagram-frame.overview')).toBeVisible();
+  await page.evaluate(()=>Promise.all(document.getAnimations().filter(a=>a.effect?.getComputedTiming().iterations!==Infinity).map(a=>a.finished)));
+  const recap=await page.locator('.diagram-frame.overview').evaluate(frame=>({svg:frame.querySelector('svg')!.getBoundingClientRect().width<=frame.clientWidth+.5,font:Math.min(...[...frame.querySelectorAll('.node-label')].map(t=>parseFloat(getComputedStyle(t).fontSize)*(t as SVGTextElement).getScreenCTM()!.a))}));
+  expect(recap.svg).toBe(true);expect(recap.font).toBeGreaterThanOrEqual(10.5);
+  await seekAudio(page,29000);await expect(page.locator('.confetti i')).toHaveCount(14);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+  await page.locator('.player').screenshot({path:`test-results/story-eight-${width}.png`,style:'.topbar{visibility:hidden}'});
+});
+
+test('story stage height does not change between phases',async({page})=>{
+  await page.emulateMedia({reducedMotion:'reduce'});await storyLesson(page,[compactShort('one','process',4)]);
+  const heights=[];for(const ms of [1000,8000,15000,23000,28000]){await seekAudio(page,ms);heights.push(await page.locator('.player').evaluate(e=>Math.round(e.getBoundingClientRect().height)));}
+  expect(new Set(heights).size).toBe(1);
+});
+
+test('after the last short of a finished lesson, the next slide is the rating, not a video',async({page})=>{
+  await mock(page);await start(page);await page.getByRole('button',{name:'Next short'}).click();await expect(page.locator('.player h2')).toHaveText('Understand an index two');
+  // Nothing about rating while a short is still playing; it is its own slide.
+  await page.getByLabel('Seek within short').fill('30000');await expect(page.getByRole('radiogroup',{name:'Rate this lesson'})).toHaveCount(0);
+  await page.getByRole('button',{name:'Next short'}).click();const slide=page.getByTestId('rating-slide');
+  await expect(slide).toBeVisible();await expect(slide).toHaveClass(/player/);await expect(slide.getByRole('heading')).toHaveText('How was this lesson?');await expect(slide).toContainText('Database indexes');await expect(slide).toContainText('2 shorts · 1:00');
+  await expect(page.locator('audio')).toHaveCount(0);await expect(page.getByRole('button',{name:'Next short'})).toBeDisabled();
+  await expect(page.locator('.outline-item.current')).toContainText('Rate this lesson');
+  await page.getByRole('radio',{name:'4 stars'}).click();await expect(page.getByRole('radio',{name:'4 stars'})).toHaveAttribute('aria-checked','true');await expect(slide.getByRole('status')).toHaveText('Thanks for rating this lesson 4 out of 5.');
+  await page.reload();await expect(page.getByTestId('rating-slide')).toBeVisible();await expect(page.getByRole('radio',{name:'4 stars'})).toHaveAttribute('aria-checked','true');
+  await page.getByRole('button',{name:'Previous short'}).click();await expect(page.locator('.player h2')).toHaveText('Understand an index two');
+  await page.locator('.outline-item',{hasText:'Rate this lesson'}).click();await expect(page.getByTestId('rating-slide')).toBeVisible();
+  await page.setViewportSize({width:390,height:844});const swipe=async(y:number)=>page.locator('.shorts-view').evaluate((view,y)=>{view.dispatchEvent(new TouchEvent('touchstart',{bubbles:true,touches:[new Touch({identifier:1,target:view,clientX:200,clientY:500})]}));view.dispatchEvent(new TouchEvent('touchend',{bubbles:true,changedTouches:[new Touch({identifier:1,target:view,clientX:200,clientY:y})]}));},y);
+  await swipe(300);await expect(page.getByTestId('rating-slide')).toBeVisible();await swipe(700);await expect(page.locator('.player h2')).toHaveText('Understand an index two');
+});
+
+test('a stopped lesson rates after its last ready short; a running lesson has no rating slide yet',async({page})=>{
+  const cancelled=makeLesson() as any;cancelled.shorts.push(makeShort('three'));cancelled.short_ids.push('three');cancelled.shorts[2].status='cancelled';Object.assign(cancelled.job,{status:'cancelled',stage:'cancelled'});cancelled.status='cancelled';
+  await mock(page,cancelled);await start(page);await page.getByRole('button',{name:'Next short'}).click();await expect(page.locator('.player h2')).toHaveText('Understand an index two');
+  await page.getByRole('button',{name:'Next short'}).click();await expect(page.getByTestId('rating-slide')).toBeVisible();
+  await page.unrouteAll({behavior:'ignoreErrors'});await page.evaluate(()=>localStorage.clear());
+  const running=makeLesson() as any;running.shorts.push({...makeShort('three'),status:'generating'});running.short_ids.push('three');Object.assign(running.job,{status:'running',stage:'preparing short 3'});running.status='partially_ready';
+  await mock(page,running);await start(page);await page.getByRole('button',{name:'Next short'}).click();await expect(page.locator('.player h2')).toHaveText('Understand an index two');
+  await expect(page.getByRole('button',{name:'Next short'})).toBeDisabled();await expect(page.locator('.outline-item',{hasText:'Rate this lesson'})).toHaveCount(0);
+});
+
+test('nothing sits below the player: no captions, transcript or readiness text; readiness lives in the Sources pane',async({page})=>{
+  await mock(page);await start(page);
+  await expect(page.locator('.player-area > :not(.shorts-view)')).toHaveCount(0);
+  await expect(page.getByTestId('captions')).toHaveCount(0);await expect(page.getByRole('button',{name:/captions/i})).toHaveCount(0);await expect(page.getByText('Full transcript')).toHaveCount(0);
+  await expect(page.locator('#lesson-details').getByTestId('ready-ahead')).toContainText('Next 1 short ready');await expect(page.locator('#lesson-details').getByTestId('client-preload')).toBeVisible();
 });

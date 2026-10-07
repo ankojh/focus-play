@@ -34,6 +34,8 @@ test('real generated storyboard plays, seeks, loops and survives refresh', async
     const actual = await route.fetch({ url: new URL(url.pathname + url.search, base).href });
     await route.fulfill({ response: actual });
   });
+  // The kicker names the current beat ("NN / NN · purpose"); it is the visible narration clock.
+  const kicker = (i: number) => new RegExp(`^${String(i + 1).padStart(2, '0')} / ${String(short.narration_units.length).padStart(2, '0')}`);
   await page.setViewportSize({ width: 1280, height: 1000 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Library', exact: true }).click();
@@ -52,13 +54,13 @@ test('real generated storyboard plays, seeks, loops and survives refresh', async
     await page.locator('audio').evaluate((a: HTMLAudioElement, ms: number) => { a.pause(); a.currentTime = ms / 1000; }, ms);
     const selector = scene.kind === 'diagram' ? '.diagram' : `[data-visual-kind=${scene.kind}]`;
     await expect(page.locator(selector)).toBeVisible();
-    const beat = short.narration_units.find((b: any) => b.scene_id === scene.id);
-    await expect(page.getByTestId('captions')).toHaveText(beat.text);
+    const beat = short.narration_units.findIndex((b: any) => b.scene_id === scene.id);
+    await expect(page.locator('.player-kicker')).toHaveText(kicker(beat));
     await page.screenshot({ path: `test-results/real-provider-${scene.kind}.png`, fullPage: true });
   }
-  for (const beat of short.narration_units) {
+  for (const [i, beat] of short.narration_units.entries()) {
     await page.locator('audio').evaluate((a: HTMLAudioElement, ms: number) => { a.pause(); a.currentTime = ms / 1000; }, beat.start_ms + 100);
-    await expect(page.getByTestId('captions')).toHaveText(beat.text);
+    await expect(page.locator('.player-kicker')).toHaveText(kicker(i));
     const scene = short.scenes.find((s: any) => s.id === beat.scene_id);
     if (scene.kind === 'diagram') {
       const focus = [...scene.actions].reverse().find((a: any) => a.kind === 'highlight' && a.at_ms <= beat.start_ms);
@@ -74,8 +76,4 @@ test('real generated storyboard plays, seeks, loops and survives refresh', async
   await expect.poll(() => page.locator('audio').evaluate((a: HTMLAudioElement) => a.readyState)).toBeGreaterThanOrEqual(1);
   await page.getByLabel('Seek within short').fill('0');
   await expect(page.locator('.diagram')).toBeVisible();
-  await page.getByText('Full transcript', { exact: true }).click();
-  for (const unit of short.narration_units) {
-    await expect(page.locator('.short-transcript')).toContainText(unit.text);
-  }
 });

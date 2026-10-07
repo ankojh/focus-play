@@ -1,7 +1,8 @@
 import type { Scene } from './api';
 
 export const ROLE_LABELS:Record<string,string>={neutral:'Concept',start:'Start',step:'Step',result:'Result',warning:'Caution',good:'Do',bad:"Don't"};
-export const ROLE_COLORS:Record<string,string>={neutral:'#5c6178',start:'#2563eb',step:'#c2610c',result:'#059669',warning:'#dc2626',good:'#059669',bad:'#dc2626'};
+// Dark enough for AA (4.5:1) on the light theme's white and focused cream cards.
+export const ROLE_COLORS:Record<string,string>={neutral:'#5c6178',start:'#1d4ed8',step:'#9a4a06',result:'#047857',warning:'#b91c1c',good:'#047857',bad:'#b91c1c'};
 // Saturated enough to read on the light slide theme.
 const identities=['#4f7cff','#a855f7','#f59e0b','#14b8a6'];
 // Identity is independent of semantic role and stays stable across related scenes.
@@ -30,14 +31,21 @@ export function wrapMeasured(text:string,width:number,size:number,weight=400):st
 }
 
 export type Box={x:number;y:number;w:number;h:number};
+// Card anatomy, shared by the SVG diagram and the HTML story cards so text never crowds the icon or edges:
+// inner padding, an icon row (icon on a soft circle, role beside it), label lines, detail lines.
+export function cardAnatomy(font:number,crowded:boolean){
+  const iconSize=font*1.3;
+  return {inner:crowded?12:16,iconSize,blobRadius:iconSize*.8,roleGap:font*.5,labelGap:font*.6,detailGap:font*.35};
+}
 // Fixed-shape layouts keep authored slots; nodes cannot move between them.
 export const FIXED_LAYOUTS=new Set(['cycle','dos_donts','key_fact','funnel','matrix','hierarchy','venn']);
 const INDENT=28;
 // More than 4 items is "crowded": denser cards, two columns for unordered layouts, and the
 // player dims earlier items so the current one stays the focus.
 export const CROWDED=4;
-export function diagramLayout(scene:Scene,width:number,measuredFont:number){
-  const t=scene.template,crowded=scene.nodes.length>CROWDED;
+// Dense uses the crowded metrics regardless of count, e.g. for the zoomed-out ending recap.
+export function diagramLayout(scene:Scene,width:number,measuredFont:number,dense=false){
+  const t=scene.template,crowded=dense || scene.nodes.length>CROWDED;
   const font=crowded?measuredFont*.88:measuredFont,gap=crowded?20:36,pad=crowded?16:24;
   const paired=(['comparison','chart','dos_donts'].includes(t) && width>=340*(font/16)) || t==='matrix' || (crowded && ['comparison','key_fact'].includes(t) && width>=300);
   const columns=paired?2:1,w=(width-pad*2-(columns-1)*gap)/columns;
@@ -50,15 +58,13 @@ export function diagramLayout(scene:Scene,width:number,measuredFont:number){
   }
   // Venn: two overlapping circles (slots 0 and 1) with the shared idea as a card below.
   const radius=Math.min((width-pad*2)/3.2,font*9),circle=(i:number)=>t==='venn' && i<2;
-  // Card anatomy, shared by layout heights and rendering so text never crowds the icon or edges:
-  // inner padding, an icon row (icon on a soft circle, role beside it), label lines, detail lines.
-  const inner=crowded?12:16,iconSize=font*1.3,blobRadius=iconSize*.8,top=font*2.6;
+  const {inner,iconSize,blobRadius,labelGap,detailGap}=cardAnatomy(font,crowded),top=font*2.6;
   const funnelInset=(bw:number)=>t==='funnel'?Math.min(14,bw*.06):0;
   const metrics=(labelLines:number,detailLines:number,isMain:boolean)=>{
     const size=labelSize*(isMain?1.25:1),step=labelStep*(isMain?1.25:1);
     // The icon circle spans inner..inner+2*blobRadius; the label starts a clear gap below it.
-    const heading=inner+2*blobRadius+font*.6+size*.8;
-    const detailY=heading+(labelLines-1)*step+font*.35+detailSize;
+    const heading=inner+2*blobRadius+labelGap+size*.8;
+    const detailY=heading+(labelLines-1)*step+detailGap+detailSize;
     const last=detailLines?detailY+(detailLines-1)*detailStep:heading+(labelLines-1)*step;
     return {heading,detailY,height:last+font*.4+inner};
   };

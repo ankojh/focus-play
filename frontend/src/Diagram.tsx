@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import type { Scene } from './api';
 import { ICONS } from './icons';
 import { diagramFrame } from './playback';
@@ -16,29 +16,34 @@ function edge(b:Box,tx:number,ty:number):[number,number]{
   return [b.x+dx*scale,b.y+dy*scale];
 }
 
-export function Diagram({scene,time}:{scene:Scene;time:number}){
+// The overview is the ending recap: the whole arrangement zoomed out to fit, nothing dimmed, last item focused.
+export function Diagram({scene,time,overview=false,pan=0}:{scene:Scene;time:number;overview?:boolean;pan?:number}){
   const frame=useRef<HTMLDivElement>(null),marker=useId();
-  const [size,setSize]=useState({width:320,font:16});
+  const [size,setSize]=useState({width:320,font:16,height:360});
   const reduced=useSyncExternalStore(subscribeMotion,getMotion,()=>true);
   useLayoutEffect(()=>{
     const element=frame.current!;
-    const measure=()=>{const next={width:Math.max(120,element.clientWidth),font:parseFloat(getComputedStyle(element).fontSize)};setSize(old=>old.width===next.width && old.font===next.font?old:next);};
+    const measure=()=>{const next={width:Math.max(120,element.clientWidth),font:parseFloat(getComputedStyle(element).fontSize),height:element.clientHeight};setSize(old=>old.width===next.width && old.font===next.font && old.height===next.height?old:next);};
     measure();const observer=new ResizeObserver(measure);observer.observe(element);observer.observe(document.documentElement);
     return()=>observer.disconnect();
   },[]);
-  const layout=useMemo(()=>diagramLayout(scene,size.width,size.font),[scene,size]);
+  const layout=useMemo(()=>diagramLayout(scene,size.width,size.font,overview),[scene,size.width,size.font,overview]);
+  // The recap uses dense cards, then zooms out only as far as text stays readable; taller ones scroll to the focus.
+  const zoom=overview?Math.max(.75,Math.min(1,(size.height-8)/layout.height)):1;
   const {state,drawn,progress}=diagramFrame(scene,time,reduced);
   const focused=[...state.entries()].find(([,s])=>s.visible && s.highlight)?.[0];
   const focusSlot=focused?(FIXED_LAYOUTS.has(scene.template)?layout.assigned.get(focused):state.get(focused)?.slot):undefined;
   useLayoutEffect(()=>{
     const reader=frame.current!;
+    // The recap camera follows the audio clock, so it only moves while playing or seeking.
+    if(overview && !reduced){reader.scrollTop=(reader.scrollHeight-reader.clientHeight)*pan;return;}
     if(focusSlot==null){reader.scrollTop=0;return;}
-    const target=layout.slots[focusSlot],top=target.y-target.h/2,bottom=target.y+target.h/2;
+    const target=layout.slots[focusSlot],top=(target.y-target.h/2)*zoom,bottom=(target.y+target.h/2)*zoom;
     // Snap only when semantic focus/layout changes; never run a smooth-scroll timer
     // or fight a learner manually scrolling the settled visual while paused.
     // One smooth move per focus change (not a timer), leaving the previous card partly in view.
     if(top<reader.scrollTop || bottom>reader.scrollTop+reader.clientHeight)reader.scrollTo({top:Math.max(0,top-Math.min(reader.clientHeight*.25,80)),behavior:reduced?'auto':'smooth'});
-  },[focused,focusSlot,layout,reduced]);
+  },[focused,focusSlot,layout,reduced,zoom,overview,pan]);
   const box=(id:string)=>{
     const s=state.get(id)!;
     const from=layout.slots[FIXED_LAYOUTS.has(scene.template)?layout.assigned.get(id)!:s.fromSlot];
@@ -51,12 +56,12 @@ export function Diagram({scene,time}:{scene:Scene;time:number}){
   const visible=scene.nodes.filter(n=>state.get(n.id)!.visible);
   // Crowded slides keep the current and previous item bright and dim the ones already covered.
   const order=visible.map(n=>n.id).sort((a,b)=>state.get(a)!.appearAt-state.get(b)!.appearAt),focusIndex=focused?order.indexOf(focused):-1;
-  const past=new Set(layout.crowded && focusIndex>1?order.slice(0,focusIndex-1):[]);
+  const past=new Set(layout.crowded && !overview && focusIndex>1?order.slice(0,focusIndex-1):[]);
   const summary=`${scene.template} diagram: ${visible.map(n=>{const s=state.get(n.id)!;return `${s.label}${s.detail?`: ${s.detail}`:''}${n.value!=null?`: ${n.value}`:''} (${ROLE_LABELS[s.role]??s.role})`;}).join('; ')}`;
-  return <div className="diagram-frame visual-reader" ref={frame} tabIndex={0} aria-label="Diagram reading area. Scroll to read all revealed content.">
-    <svg className="diagram" data-scene-id={scene.id??'legacy'} viewBox={`0 0 ${size.width} ${layout.height}`} width={size.width} height={layout.height} role="img" aria-label={summary}>
+  return <div className={`diagram-frame visual-reader${overview?' overview':''}`} ref={frame} tabIndex={0} aria-label="Diagram reading area. Scroll to read all revealed content.">
+    <svg className="diagram" data-scene-id={scene.id??'legacy'} viewBox={`0 0 ${size.width} ${layout.height}`} width={size.width*zoom} height={layout.height*zoom} role="img" aria-label={summary}>
       <defs><marker id={marker} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path className="diagram-arrowhead" d="M 0 0 L 10 5 L 0 10 z" fill="#c2cfde"/></marker></defs>
-      <text x="24" y={layout.font*1.4} className="diagram-tag" style={{fontSize:layout.detailSize}}>{TAGS[scene.template]}</text>
+      <text x="24" y={layout.font*1.4} className="diagram-tag" style={{fontSize:layout.detailSize}}>{TAGS[scene.template]}{overview?' · The whole picture':''}</text>
       {scene.template==='timeline' && <line className="diagram-guide" x1="12" y1={layout.font*2} x2="12" y2={layout.height-24} stroke="#69798d" strokeWidth="2"/>}
       <g className="diagram-content">
       {scene.template==='matrix' && (()=>{const [a,b,c,d]=layout.slots,cx=(a.x+b.x)/2,cy=(a.y+c.y)/2;return <g className="diagram-guide" stroke="#69798d" strokeDasharray="4 6" strokeWidth="1.5"><line x1={cx} y1={a.y-a.h/2-10} x2={cx} y2={d.y+d.h/2+10}/><line x1={a.x-a.w/2-10} y1={cy} x2={d.x+d.w/2+10} y2={cy}/></g>;})()}
@@ -81,14 +86,14 @@ export function Diagram({scene,time}:{scene:Scene;time:number}){
           // A Venn set is a translucent circle; its text sits away from the overlap.
           const r=layout.radius,cx=layout.assigned.get(node.id)===0?-r*.3:r*.3;
           const top=-(layout.font*1.4+8+text.label.length*labelStep+text.detail.length*layout.detailStep)/2,labelTop=top+layout.font*1.4+8+labelSize*.9;
-          return <g key={node.id} data-testid={`node-${node.id}`} data-focused={s.highlight} data-entity-color={identity} transform={`translate(${b.x},${b.y})`} opacity={opacity}>
+          return <g key={node.id} data-testid={`node-${node.id}`} data-focused={s.highlight} data-entity-color={identity} transform={`translate(${b.x},${b.y})`} opacity={opacity} style={overview?{'--order':order.indexOf(node.id)} as CSSProperties:undefined}>
             <g className="node-pop"><circle className="venn-set" r={r} fill={identity} fillOpacity={s.highlight?.26:.14} stroke={s.highlight?'#ffbf66':identity} strokeWidth={s.highlight?3:1.5}/>
             {Icon && <Icon x={cx-layout.font*.7} y={top} size={layout.font*1.4} color={identity}/>}
             {text.label.map((line,j)=><text key={`label-${j}`} x={cx} y={labelTop+j*labelStep} textAnchor="middle" className="node-label" style={{fontSize:labelSize}}>{line}</text>)}
             {text.detail.map((line,j)=><text key={`detail-${j}`} x={cx} y={labelTop+text.label.length*labelStep+j*layout.detailStep} textAnchor="middle" className="node-detail" style={{fontSize:layout.detailSize}}>{line}</text>)}
           </g></g>;
         }
-        return <g key={node.id} data-testid={`node-${node.id}`} data-focused={s.highlight} data-entity-color={identity} data-past={past.has(node.id)} transform={`translate(${b.x},${b.y})`} opacity={opacity}>
+        return <g key={node.id} data-testid={`node-${node.id}`} data-focused={s.highlight} data-entity-color={identity} data-past={past.has(node.id)} transform={`translate(${b.x},${b.y})`} opacity={opacity} style={overview?{'--order':order.indexOf(node.id)} as CSSProperties:undefined}>
           <g className="node-pop">
           {scene.template==='timeline' && <circle cx={12-b.x} cy="0" r="5" fill={identity}/>}
           {scene.template==='funnel'?<><path className="node-shadow" transform="translate(4 4)" d={`M ${-b.w/2} ${-b.h/2} H ${b.w/2} L ${b.w/2-inset} ${b.h/2} H ${-b.w/2+inset} Z`} fill="none"/><path className="node-card" d={`M ${-b.w/2} ${-b.h/2} H ${b.w/2} L ${b.w/2-inset} ${b.h/2} H ${-b.w/2+inset} Z`} strokeLinejoin="round" fill={s.highlight?'#263447':'#1b2430'} stroke={s.highlight?'#ffbf66':identity} strokeWidth={s.highlight?3:1.5}/></>:<>
