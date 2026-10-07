@@ -4,6 +4,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
 const kicker=(beat:number,count:number)=>new RegExp(`^${String(beat).padStart(2,'0')} / ${String(count).padStart(2,'0')}`);
 const compiledStoryboard=JSON.parse(readFileSync(new URL('../../fixtures/storyboard-lookup-playback.json',import.meta.url),'utf8'));
 function storyboardLesson(){const lesson=makeLesson();lesson.shorts[0]={...structuredClone(compiledStoryboard),id:'one'};return lesson;}
+// Phones hide the arrow buttons (swipe instead); the player's keyboard shortcut works everywhere.
+async function nextShort(page:Page){const button=page.getByRole('button',{name:'Next short'});if(await button.isVisible())await button.click();else{await page.locator('.player').focus();await page.keyboard.press('ArrowDown');}}
 async function seekAudio(page:Page,ms:number){
   await page.locator('audio').evaluate((a:HTMLAudioElement)=>a.pause());
   await page.locator('audio').evaluate((a:HTMLAudioElement,ms)=>new Promise<void>(resolve=>{
@@ -55,15 +57,17 @@ test('teaching outcomes and planned practice allowances are visible without a ti
   await page.getByRole('button',{name:'A row',exact:true}).click();await expect(page.locator('.question [role="status"]')).toContainText('Correct.');
 });
 
-test('final session copy explains measured videos, practice and coverage shortfall',async({page})=>{
+test('final session copy explains the session length and coverage shortfall',async({page})=>{
   const lesson=makeLesson() as any;
   lesson.planning={version:2,completion_reason:'coverage_exhausted',completion_detail:'Available sources support only lookup and scans.'};
   lesson.duration_ledger={version:2,measured_ready_media_ms:60000,reserved_practice_ms:20000,estimated_unready_media_ms:0,reserved_closing_ms:0,forecast_total_ms:80000,final_content_ms:80000,original_content_ms:80000,extra_content_ms:0,utilisation:80000/300000,shortfall_ms:190000};
   lesson.planned_duration_ms=80000;
   await mock(page,lesson);await start(page);
-  await expect(page.getByTestId('session-duration')).toHaveText('About 1:20 of videos and practice for your 5:00 session');
-  await expect(page.locator('.lesson-heading')).toContainText('Measured ready video 1:00');
-  await expect(page.locator('.lesson-heading')).toContainText('Scheduled practice allowance 0:20');
+  // The heading is just the lesson title; session length and ready counts are not shown.
+  await expect(page.getByTestId('session-duration')).toHaveCount(0);await expect(page.locator('.lesson-heading')).not.toContainText('shorts ready');
+  // The lesson heading stays lean: no back button and no measured-video/practice-allowance breakdown.
+  await expect(page.locator('.lesson-heading')).not.toContainText('Measured ready video');await expect(page.locator('.lesson-heading')).not.toContainText('Scheduled practice allowance');
+  await expect(page.getByRole('button',{name:'New lesson'})).toHaveCount(0);
   await expect(page.getByTestId('session-shortfall')).toContainText('27% of the original budget');
   await expect(page.getByTestId('session-shortfall')).toContainText(lesson.planning.completion_detail);
   await expect(page.getByTestId('session-shortfall')).toContainText('No repeated loops or generation wait counted');
@@ -79,13 +83,10 @@ test('forecast and expanding outline update without moving the selected ready sh
   await page.getByRole('button',{name:'Next short'}).click();
   await expect(page.locator('.player h2')).toHaveText('Understand an index two');
   const audio=await page.locator('audio').elementHandle();
-  await expect(page.getByTestId('session-duration')).toContainText('Current estimate: about 1:00');
-  await expect(page.locator('.lesson-heading')).toContainText('Outline may expand');
   lesson.shorts.push({...makeShort('extension'),status:'queued',curriculum_role:'extension',measured_duration_ms:0});
   lesson.short_ids.push('extension');lesson.job.event_sequence=5;lesson.planning.revision=2;
   lesson.duration_ledger.forecast_total_ms=90000;lesson.duration_ledger.estimated_unready_media_ms=30000;
   await expect(page.locator('.outline-item')).toHaveCount(3,{timeout:10000});
-  await expect(page.getByTestId('session-duration')).toContainText('Current estimate: about 1:30');
   await expect(page.locator('.outline-item.current')).toContainText('Understand an index two');
   await expect(page.locator('.player h2')).toHaveText('Understand an index two');
   expect(await audio!.evaluate((a:HTMLAudioElement)=>a.isConnected)).toBe(true);
@@ -106,11 +107,15 @@ for(const width of [1280,390])test(`Sources toggles the entire details pane with
   await page.getByRole('button',{name:'Play',exact:true}).click();await expect(page.getByRole('button',{name:'Pause',exact:true})).toBeVisible();
   const audio=await page.locator('audio').elementHandle();
   const pane=page.getByRole('complementary',{name:'Lesson details'});
+  // On phones the open sheet covers the short, so it closes from its own close button.
+  const hide=()=>page.getByRole('button',{name:width<600?'Close sources':'Hide sources pane'}).click();
+  // Phones start with Sources closed; it opens as a bottom sheet over the short.
+  if(width<600){await expect(page.locator('#lesson-details')).toBeHidden();await page.getByRole('button',{name:'Show sources pane'}).click();}
   await expect(pane).toBeVisible();await expect(page.getByRole('button',{name:'Hide sources pane'})).toHaveAttribute('aria-expanded','true');
-  await page.getByRole('button',{name:'Hide sources pane'}).click();await expect(page.locator('#lesson-details')).toBeHidden();await expect(page.getByRole('heading',{name:'Lesson outline'})).toBeHidden();await expect(page.locator('.evidence-list')).toBeHidden();await expect(page.locator('.lesson-grid')).toHaveClass(/pane-hidden/);
+  await hide();await expect(page.locator('#lesson-details')).toBeHidden();await expect(page.getByRole('heading',{name:'Lesson outline'})).toBeHidden();await expect(page.locator('.evidence-list')).toBeHidden();await expect(page.locator('.lesson-grid')).toHaveClass(/pane-hidden/);
   await expect(page.getByRole('button',{name:'Show sources pane'})).toHaveAttribute('aria-expanded','false');await expect(page.getByRole('button',{name:'Show sources pane'})).toHaveAttribute('aria-controls','lesson-details');expect(await audio!.evaluate((a:HTMLAudioElement)=>!a.paused && a.isConnected)).toBe(true);
   await page.getByRole('button',{name:'Show sources pane'}).click();await expect(pane).toBeVisible();await expect(page.getByRole('heading',{name:'Lesson outline'})).toBeVisible();await expect(page.locator('.evidence-list')).toBeVisible();await expect(page.locator('.lesson-grid')).not.toHaveClass(/pane-hidden/);expect(await audio!.evaluate((a:HTMLAudioElement)=>!a.paused && a.isConnected)).toBe(true);
-  await page.getByRole('button',{name:'Hide sources pane'}).click();await page.getByRole('button',{name:'Next short'}).click();await expect(page.locator('.player h2')).toHaveText('Understand an index two');await expect(page.locator('#lesson-details')).toBeHidden();await page.getByRole('button',{name:'Show sources pane'}).click();await expect(page.locator('.learning-point h3')).toHaveText('Understand an index two');
+  await hide();await nextShort(page);await expect(page.locator('.player h2')).toHaveText('Understand an index two');await expect(page.locator('#lesson-details')).toBeHidden();await page.getByRole('button',{name:'Show sources pane'}).click();await expect(page.locator('.learning-point h3')).toHaveText('Understand an index two');
 });
 
 test('empty library offers a way to create a lesson',async({page})=>{
@@ -162,7 +167,9 @@ test('three-field form submits without sources or manual entry',async({page})=>{
   const state=await mock(page,makeLesson(),{emptySources:true});await page.goto('/');
   await expect(page.getByText('Where should the lesson start?')).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Create my lesson'})).toBeEnabled();
-  await page.getByLabel('Learning goal').fill('Database indexes');await page.getByLabel('What do you already know?').selectOption('custom');await page.getByLabel('Describe current knowledge').fill('I know SQL');await page.getByLabel('How much time do you have?').selectOption('120');
+  // Two minutes is the default session length.
+  await expect(page.getByLabel('How much time do you have?')).toHaveValue('120');
+  await page.getByLabel('Learning goal').fill('Database indexes');await page.getByLabel('What do you already know?').selectOption('custom');await page.getByLabel('Describe current knowledge').fill('I know SQL');
   await page.getByRole('button',{name:'Create my lesson'}).click();await expect(page.getByRole('button',{name:'Play',exact:true})).toBeVisible();
   expect(Object.keys(state.body()).sort()).toEqual(['goal','language','prior_knowledge','request_id','time_budget_seconds']);expect(state.body()).toMatchObject({goal:'Database indexes',prior_knowledge:'I know SQL',time_budget_seconds:120});
   await expect(page.getByRole('link',{name:'Open source',exact:true})).toHaveAttribute('href','https://www.youtube.com/watch?v=testvideo01&t=12s');
@@ -563,4 +570,42 @@ test('nothing sits below the player: no captions, transcript or readiness text; 
   await expect(page.locator('.player-area > :not(.shorts-view)')).toHaveCount(0);
   await expect(page.getByTestId('captions')).toHaveCount(0);await expect(page.getByRole('button',{name:/captions/i})).toHaveCount(0);await expect(page.getByText('Full transcript')).toHaveCount(0);
   await expect(page.locator('#lesson-details').getByTestId('ready-ahead')).toContainText('Next 1 short ready');await expect(page.locator('#lesson-details').getByTestId('client-preload')).toBeVisible();
+});
+
+test('one trackpad flick moves one short; a new flick during momentum moves again; wheel over the short never scrolls the page',async({page})=>{
+  const l=makeLesson();l.shorts.push(makeShort('three'),makeShort('four'));l.short_ids.push('three','four');await mock(page,l);await start(page);
+  // A flick: a strong burst, then trackpad momentum that decays over about half a second.
+  const flick=(peak:number)=>page.locator('.shorts-view').evaluate(async(view,peak)=>{
+    for(let d=peak;Math.abs(d)>=1;d*=.88){view.dispatchEvent(new WheelEvent('wheel',{deltaY:d,bubbles:true,cancelable:true}));await new Promise(r=>setTimeout(r,16));}
+  },peak);
+  const h2=page.locator('.player h2');
+  await flick(90);await expect(h2).toHaveText('Understand an index two');await page.waitForTimeout(250);await expect(h2).toHaveText('Understand an index two');
+  // A second, clearly stronger push while the first one's momentum is still dying out.
+  await page.locator('.shorts-view').evaluate(async view=>{
+    for(let d=90;d>=4;d*=.85){view.dispatchEvent(new WheelEvent('wheel',{deltaY:d,bubbles:true,cancelable:true}));await new Promise(r=>setTimeout(r,16));}
+    for(let d=80;d>=1;d*=.85){view.dispatchEvent(new WheelEvent('wheel',{deltaY:d,bubbles:true,cancelable:true}));await new Promise(r=>setTimeout(r,16));}
+  });
+  await expect(h2).toHaveText('Understand an index four');
+  await flick(-90);await expect(h2).toHaveText('Understand an index three');
+  // At the first short the wheel is still consumed by the short instead of scrolling the page.
+  await page.locator('.outline-item').first().click();await expect(h2).toHaveText('Understand an index one');
+  const prevented=await page.locator('.shorts-view').evaluate(view=>{const e=new WheelEvent('wheel',{deltaY:-120,bubbles:true,cancelable:true});view.dispatchEvent(e);return e.defaultPrevented;});
+  expect(prevented).toBe(true);await expect(h2).toHaveText('Understand an index one');
+});
+
+test('phones get a full-screen short with floating actions, a bottom nav and Sources as a bottom sheet',async({page})=>{
+  await page.setViewportSize({width:390,height:844});await mock(page);await start(page);
+  await page.evaluate(()=>Promise.all(document.getAnimations().filter(a=>a.effect?.getComputedTiming().iterations!==Infinity).map(a=>a.finished)));
+  const player=await page.locator('.player').boundingBox(),nav=await page.locator('.sidebar').boundingBox();
+  expect(player!.x).toBe(0);expect(player!.width).toBe(390);expect(Math.round(player!.y)).toBe(0);expect(Math.round(player!.y+player!.height)).toBe(Math.round(nav!.y));expect(Math.round(nav!.y+nav!.height)).toBe(844);
+  await expect(page.locator('.topbar')).toBeHidden();await expect(page.locator('.lesson-heading')).toBeHidden();await expect(page.locator('.short-navigation')).toBeHidden();
+  expect(await page.evaluate(()=>[document.documentElement.scrollHeight,document.documentElement.scrollWidth])).toEqual([844,390]);
+  // Actions float over the bottom-right of the short.
+  const like=await page.getByRole('button',{name:'Like short',exact:true}).boundingBox();expect(like!.x+like!.width).toBeLessThanOrEqual(390);expect(like!.y).toBeGreaterThan(player!.y+player!.height/3);expect(like!.y+like!.height).toBeLessThan(player!.y+player!.height);
+  await expect(page.locator('#lesson-details')).toBeHidden();
+  await page.getByRole('button',{name:'Show sources pane'}).click();const sheet=page.locator('#lesson-details');await expect(sheet).toBeVisible();
+  await page.evaluate(()=>Promise.all(document.getAnimations().filter(a=>a.effect?.getComputedTiming().iterations!==Infinity).map(a=>a.finished)));
+  const box=await sheet.boundingBox();expect(Math.round(box!.y+box!.height)).toBe(844);expect(box!.width).toBe(390);
+  await page.getByRole('button',{name:'Close sources'}).click();await expect(sheet).toBeHidden();
+  await page.getByRole('button',{name:'Show sources pane'}).click();await page.locator('.sheet-backdrop').click({position:{x:20,y:20}});await expect(sheet).toBeHidden();
 });

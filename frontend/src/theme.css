@@ -19,7 +19,7 @@
 /* Top bar, title and kicker. */
 .player .player-top button{background:#ffffffc0;color:var(--ink);border:2px solid var(--ink)}
 .player .player-top button:hover{background:#fff}
-.player .player-type,.player .control-row,.player .player-bottom div>span,.player .cover-credit{color:var(--visual-support)}
+.player .player-type,.player .control-row{color:var(--visual-support)}
 .player h2,.player .player-kicker{font-family:"Arial Rounded MT Bold",ui-rounded,"Nunito",system-ui,sans-serif}
 .player h2{color:var(--ink);text-shadow:none}
 .player .player-kicker{color:var(--coral)}

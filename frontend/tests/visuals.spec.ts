@@ -23,6 +23,8 @@ async function mock(page:Page,body=lesson(),missing=false){
   });
 }
 async function start(page:Page){await page.goto('/');await page.getByLabel('Learning goal').fill('Mixed visual diagnostic');await page.getByRole('button',{name:'Create my lesson'}).click();await expect(page.locator('.player')).toBeVisible();await expect.poll(()=>page.locator('audio').evaluate((a:HTMLAudioElement)=>a.readyState)).toBeGreaterThanOrEqual(1);await page.locator('audio').evaluate((a:HTMLAudioElement)=>a.pause());}
+// Phones hide the arrow buttons (swipe instead); the player's keyboard shortcut works everywhere.
+async function nextShort(page:Page){const button=page.getByRole('button',{name:'Next short'});if(await button.isVisible())await button.click();else{await page.locator('.player').focus();await page.keyboard.press('ArrowDown');}}
 async function seek(page:Page,ms:number){await expect.poll(()=>page.locator('audio').evaluate((a:HTMLAudioElement)=>a.readyState)).toBeGreaterThanOrEqual(1);await page.locator('audio').evaluate((a:HTMLAudioElement)=>a.pause());if(ms%100===0)await page.getByLabel('Seek within short').fill(String(ms));else await page.locator('audio').evaluate((a:HTMLAudioElement,ms)=>{a.pause();a.currentTime=ms/1000;},ms);await expect.poll(()=>page.locator('audio').evaluate((a:HTMLAudioElement)=>a.currentTime)).toBeCloseTo(ms/1000,1);}
 
 for(const width of [1280,390])test(`mixed diagrams/table/chart share the audio clock at width ${width}`,async({page})=>{
@@ -40,14 +42,14 @@ for(const width of [1280,390])test(`mixed diagrams/table/chart share the audio c
 for(const width of [1280,390])test(`code reveal, focus, seek and escaped source text at width ${width}`,async({page})=>{
   const body=lesson(),s=body.shorts[1];
   s.scenes[0].payload.text='<script>window.injected=true</script>\n<img src=x onerror="window.injected=true">';
-  await page.setViewportSize({width,height:1000});await mock(page,body);await start(page);await page.getByRole('button',{name:'Next short'}).click();await page.locator('audio').evaluate((a:HTMLAudioElement)=>a.pause());await seek(page,0);
+  await page.setViewportSize({width,height:1000});await mock(page,body);await start(page);await nextShort(page);await page.locator('audio').evaluate((a:HTMLAudioElement)=>a.pause());await seek(page,0);
   await expect(page.locator('pre')).toContainText('<script>window.injected=true</script>');await expect(page.getByTestId('visual-line_2')).toHaveCount(0);await expect(page.locator('.data-visual script,.data-visual img')).toHaveCount(0);
   await seek(page,15000);await expect(page.getByTestId('visual-line_2')).toHaveAttribute('data-focused','true');expect(await page.evaluate(()=>('injected' in window))).toBe(false);
   await page.screenshot({path:`test-results/visual-code-escaped-${width}.png`,fullPage:true});await seek(page,0);await expect(page.getByTestId('visual-line_2')).toHaveCount(0);expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
 });
 
 for(const width of [1280,390])test(`original source code fixture screenshot at width ${width}`,async({page})=>{
-  await page.setViewportSize({width,height:1000});await mock(page);await start(page);await page.getByRole('button',{name:'Next short'}).click();await page.locator('audio').evaluate((a:HTMLAudioElement)=>a.pause());await seek(page,15000);
+  await page.setViewportSize({width,height:1000});await mock(page);await start(page);await nextShort(page);await page.locator('audio').evaluate((a:HTMLAudioElement)=>a.pause());await seek(page,15000);
   await expect(page.locator('pre')).toContainText('SELECT name');await expect(page.getByTestId('visual-line_2')).toHaveAttribute('data-focused','true');await expect(page.locator('.code-visual')).toContainText('display only');await page.screenshot({path:`test-results/visual-code-${width}.png`,fullPage:true});
 });
 
@@ -58,14 +60,14 @@ test('all-zero chart uses a visible zero marker and long labels do not overflow'
 });
 
 for(const width of [1280,390])test(`managed image attribution and timed annotations at width ${width}`,async({page})=>{
-  await page.setViewportSize({width,height:1000});await mock(page);await start(page);await page.getByRole('button',{name:'Next short'}).click();await page.getByRole('button',{name:'Next short'}).click();await page.locator('audio').evaluate((a:HTMLAudioElement)=>a.pause());await seek(page,0);
+  await page.setViewportSize({width,height:1000});await mock(page);await start(page);await nextShort(page);await nextShort(page);await page.locator('audio').evaluate((a:HTMLAudioElement)=>a.pause());await seek(page,0);
   await expect(page.getByAltText('Illustrative key card pointing to a table row')).toBeVisible();await expect(page.locator('.visual-credit')).toContainText('CC0 1.0');await expect(page.getByTestId('visual-annotation_0')).toHaveCount(0);
   await seek(page,15000);await expect(page.getByTestId('visual-annotation_0')).toHaveAttribute('data-focused','true');await page.getByText('Asset provenance and permission').click();await expect(page.locator('.image-visual')).toContainText('Image rights are separate from lesson evidence.');
   await page.screenshot({path:`test-results/visual-image-${width}.png`,fullPage:true});await seek(page,0);await expect(page.getByTestId('visual-annotation_0')).toHaveCount(0);
 });
 
 test('missing essential image fails visibly and offers explicit retry',async({page})=>{
-  await mock(page,lesson(),true);await start(page);await page.getByRole('button',{name:'Next short'}).click();await page.getByRole('button',{name:'Next short'}).click();await expect(page.locator('.image-visual [role=alert]')).toContainText('essential image could not load');await page.getByRole('button',{name:'Retry image'}).click();await expect(page.locator('.image-visual [role=alert]')).toBeVisible();
+  await mock(page,lesson(),true);await start(page);await nextShort(page);await nextShort(page);await expect(page.locator('.image-visual [role=alert]')).toContainText('essential image could not load');await page.getByRole('button',{name:'Retry image'}).click();await expect(page.locator('.image-visual [role=alert]')).toBeVisible();
 });
 
 test('scrolling an overflowing visual reads its content instead of switching shorts',async({page})=>{
@@ -76,7 +78,7 @@ test('scrolling an overflowing visual reads its content instead of switching sho
   expect(await reader.evaluate(e=>e.scrollHeight>e.clientHeight)).toBe(true);
   await reader.hover();await page.mouse.wheel(0,180);await expect.poll(()=>reader.evaluate(e=>e.scrollTop)).toBeGreaterThan(0);await expect(reader).toHaveAttribute('data-scene-id','scene_2');
   await reader.focus();await page.keyboard.press('ArrowDown');await expect(reader).toHaveAttribute('data-scene-id','scene_2');
-  await page.getByRole('button',{name:'Next short'}).click();await expect(page.locator('[data-visual-kind=code]')).toBeVisible();
+  await nextShort(page);await expect(page.locator('[data-visual-kind=code]')).toBeVisible();
 });
 
 test('negative-only chart keeps its right-edge zero baseline and zero marker visible',async({page})=>{

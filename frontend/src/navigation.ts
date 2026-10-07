@@ -7,21 +7,27 @@ export function useShortsNavigation(navigation:ShortsNavigation){
   current.current=navigation;
   useEffect(()=>{
     const element=view.current;if(!element)return;
-    let total=0,locked=false,direction=0,timer:ReturnType<typeof setTimeout>|undefined;
+    // One flick moves one slide. Trackpad momentum keeps firing after the switch, so the gesture stays
+    // locked until the wheel goes quiet, unless, once the momentum is clearly dying, a much stronger push
+    // starts a new flick. A flick ramps up before it decays, so the ramp never counts as a second one.
+    let total=0,locked=false,direction=0,last=0,peak=0,timer:ReturnType<typeof setTimeout>|undefined;
     const wheel=(event:WheelEvent)=>{
       if(event.ctrlKey || Math.abs(event.deltaX)>Math.abs(event.deltaY) || (event.target as HTMLElement).closest('input,select,textarea'))return;
-      const reader=(event.target as HTMLElement).closest<HTMLElement>('.visual-reader');
-      if(reader && reader.scrollHeight>reader.clientHeight+1)return;
       const delta=event.deltaY*(event.deltaMode===1?16:event.deltaMode===2?element.clientHeight:1);
       const sign=Math.sign(delta);if(!sign)return;
-      const nav=current.current;
-      if(!(sign>0?nav.next:nav.previous))return;
+      // A visual with more to read in this direction scrolls first; at its edge the wheel moves slides again.
+      const reader=(event.target as HTMLElement).closest<HTMLElement>('.visual-reader');
+      if(reader && (sign>0?reader.scrollTop+reader.clientHeight<reader.scrollHeight-1:reader.scrollTop>0))return;
+      // Over the short the wheel never scrolls the page, even at the first or last slide.
       event.preventDefault();
-      if(sign!==direction){total=0;locked=false;direction=sign;}
-      clearTimeout(timer);timer=setTimeout(()=>{total=0;locked=false;direction=0;},180);
-      if(locked)return;
+      const nav=current.current,size=Math.abs(delta);
+      if(sign!==direction){total=0;locked=false;direction=sign;peak=0;}
+      else if(locked && last<peak/2 && size>Math.max(20,last*2.5)){total=0;locked=false;peak=0;}
+      last=size;peak=Math.max(peak,size);
+      clearTimeout(timer);timer=setTimeout(()=>{total=0;locked=false;direction=0;last=0;peak=0;},160);
+      if(locked || !(sign>0?nav.next:nav.previous))return;
       total+=delta;
-      if(Math.abs(total)<40)return;
+      if(Math.abs(total)<30)return;
       locked=true;if(sign>0)nav.onNext();else nav.onPrevious();
     };
     element.addEventListener('wheel',wheel,{passive:false});
